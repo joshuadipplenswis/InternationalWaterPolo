@@ -50,7 +50,7 @@ def main():
     import os
 
     # Path to bundled Excel file
-    default_file_path = os.path.join("data", "Winning_Losing_Teams.xlsx")
+    default_file_path = os.path.join("Users/joshua.dipple/PycharmProjects/StatisticalDifferenceStreamlit/data/Winning_Losing_Teams.xlsx")
 
     # Read both sheets automatically
     df_win = read_excel_table(default_file_path, "Winning Teams", "Table1")
