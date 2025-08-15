@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import ttest_ind
 import openpyxl
+import os
 
 st.set_page_config(layout="wide")
 
@@ -47,14 +48,28 @@ def cohen_d(x, y):
 def main():
     st.title("📊 Water Polo International Analysis Page")
 
-    uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
+    import os
 
+    # Path to your default Excel file
+    default_file_path = os.path.join("data", "international_waterpolo.xlsx")
+
+    # File uploader
+    uploaded_file = st.file_uploader("📂 Upload Excel File", type=["xlsx"])
+
+    # Use uploaded file OR fallback to default
     if uploaded_file is not None:
         df_win = read_excel_table(uploaded_file, "Winning Teams", "Table1")
         df_loss = read_excel_table(uploaded_file, "Losing Teams", "Table2")
+        st.success("✅ Data loaded from uploaded file.")
+    else:
+        df_win = read_excel_table(default_file_path, "Winning Teams", "Table1")
+        df_loss = read_excel_table(default_file_path, "Losing Teams", "Table2")
+        st.info(f"ℹ Using default file: `{default_file_path}`")
 
-        if df_win is None or df_loss is None:
-            return
+    # Stop if either table is missing
+    if df_win is None or df_loss is None:
+        st.error("❌ Required tables could not be loaded. Please check the file format.")
+        st.stop()
 
         # 👇 Competition filter
         if 'Competition' in df_win.columns and 'Competition' in df_loss.columns:
