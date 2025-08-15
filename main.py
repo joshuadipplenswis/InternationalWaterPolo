@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import ttest_ind
 import openpyxl
-import os
 
 st.set_page_config(layout="wide")
 
@@ -48,27 +47,29 @@ def cohen_d(x, y):
 def main():
     st.title("📊 Water Polo International Analysis Page")
 
-    import os
+    # Default Excel file path in your repo
+    DEFAULT_FILE = "Winning_Losing_Teams.xlsx"
 
-    # Path to your default Excel file
-    default_file_path = os.path.join("data", "international_waterpolo.xlsx")
+    # Option to upload a different file
+    uploaded_file = st.file_uploader("Upload Excel File (optional)", type=["xlsx"])
 
-    # File uploader
-    uploaded_file = st.file_uploader("📂 Upload Excel File", type=["xlsx"])
-
-    # Use uploaded file OR fallback to default
+    # Determine which file to load
     if uploaded_file is not None:
-        df_win = read_excel_table(uploaded_file, "Winning Teams", "Table1")
-        df_loss = read_excel_table(uploaded_file, "Losing Teams", "Table2")
-        st.success("✅ Data loaded from uploaded file.")
+        file_to_load = uploaded_file
     else:
-        df_win = read_excel_table(default_file_path, "Winning Teams", "Table1")
-        df_loss = read_excel_table(default_file_path, "Losing Teams", "Table2")
-        st.info(f"ℹ Using default file: `{default_file_path}`")
+        file_to_load = DEFAULT_FILE
 
-    # Stop if either table is missing
-    if df_win is None or df_loss is None:
-        st.error("❌ Required tables could not be loaded. Please check the file format.")
+    # Read data
+    try:
+        df_win = read_excel_table(file_to_load, "Winning Teams", "Table1")
+        df_loss = read_excel_table(file_to_load, "Losing Teams", "Table2")
+
+        if df_win is None or df_loss is None:
+            st.error("Could not read the required sheets or tables from the Excel file.")
+            st.stop()
+
+    except Exception as e:
+        st.error(f"❌ Error loading data: {e}")
         st.stop()
 
         # 👇 Competition filter
