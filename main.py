@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import ttest_ind
 import openpyxl
+import os
 
 st.set_page_config(layout="wide")
 
@@ -41,16 +42,17 @@ def read_excel_table(file, sheet_name: str, table_name: str):
 def cohen_d(x, y):
     nx = len(x)
     ny = len(y)
-    pooled_std = np.sqrt(((nx - 1) * np.std(x, ddof=1) ** 2 + (ny - 1) * np.std(y, ddof=1) ** 2) / (nx + ny - 2))
+    pooled_std = np.sqrt(((nx - 1) * np.std(x, ddof=1) ** 2 +
+                          (ny - 1) * np.std(y, ddof=1) ** 2) /
+                         (nx + ny - 2))
     return (np.mean(x) - np.mean(y)) / pooled_std if pooled_std != 0 else 0
+
 
 def main():
     st.title("📊 Water Polo International Analysis Page")
 
-    import os
-
-    # Path to bundled Excel file
-    default_file_path = os.path.join("Users/joshua.dipple/PycharmProjects/StatisticalDifferenceStreamlit/data/Winning_Losing_Teams.xlsx")
+    # Find the Excel file in the repo's 'data' folder
+    default_file_path = os.path.join(os.path.dirname(__file__), "data", "Winning_Losing_Teams.xlsx")
 
     # Read both sheets automatically
     df_win = read_excel_table(default_file_path, "Winning Teams", "Table1")
