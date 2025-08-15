@@ -47,29 +47,17 @@ def cohen_d(x, y):
 def main():
     st.title("📊 Water Polo International Analysis Page")
 
-    # Default Excel file path in your repo
-    DEFAULT_FILE = "Winning_Losing_Teams.xlsx"
+    import os
 
-    # Option to upload a different file
-    uploaded_file = st.file_uploader("Upload Excel File (optional)", type=["xlsx"])
+    # Path to bundled Excel file
+    default_file_path = os.path.join("data", "Winning_Losing_Teams.xlsx")
 
-    # Determine which file to load
-    if uploaded_file is not None:
-        file_to_load = uploaded_file
-    else:
-        file_to_load = DEFAULT_FILE
+    # Read both sheets automatically
+    df_win = read_excel_table(default_file_path, "Winning Teams", "Table1")
+    df_loss = read_excel_table(default_file_path, "Losing Teams", "Table2")
 
-    # Read data
-    try:
-        df_win = read_excel_table(file_to_load, "Winning Teams", "Table1")
-        df_loss = read_excel_table(file_to_load, "Losing Teams", "Table2")
-
-        if df_win is None or df_loss is None:
-            st.error("Could not read the required sheets or tables from the Excel file.")
-            st.stop()
-
-    except Exception as e:
-        st.error(f"❌ Error loading data: {e}")
+    if df_win is None or df_loss is None:
+        st.error("❌ Could not read data from the Excel file.")
         st.stop()
 
         # 👇 Competition filter
