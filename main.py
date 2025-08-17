@@ -52,9 +52,8 @@ def main():
     st.title("📊 Water Polo International Analysis Page")
 
     # Find the Excel file in the repo's 'data' folder
-    default_file_path = os.path.join(os.path.dirname(__file__), "data", "Winning_Losing_Teams.xlsx")
+    default_file_path = "Winning_Losing_Teams.xlsx"
 
-    # Read both sheets automatically
     df_win = read_excel_table(default_file_path, "Winning Teams", "Table1")
     df_loss = read_excel_table(default_file_path, "Losing Teams", "Table2")
 
