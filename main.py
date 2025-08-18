@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import ttest_ind
 import openpyxl
-import os
+from pathlib import Path  # ✅ correct import
 
 st.set_page_config(layout="wide")
 
@@ -51,11 +51,13 @@ def cohen_d(x, y):
 def main():
     st.title("📊 Water Polo International Analysis Page")
 
-    # Find the Excel file in the repo's 'data' folder
-    default_file_path = "Winning_Losing_Teams.xlsx"
+    # ✅ Load Excel from repo (adjust if you keep in /data folder)
+    DATA_PATH = Path(__file__).parent / "Winning_Losing_Teams.xlsx"
+    # If you moved it to data/, use:
+    # DATA_PATH = Path(__file__).parent / "data" / "Winning_Losing_Teams.xlsx"
 
-    df_win = read_excel_table(default_file_path, "Winning Teams", "Table1")
-    df_loss = read_excel_table(default_file_path, "Losing Teams", "Table2")
+    df_win = read_excel_table(DATA_PATH, "Winning Teams", "Table1")
+    df_loss = read_excel_table(DATA_PATH, "Losing Teams", "Table2")
 
     if df_win is None or df_loss is None:
         st.error("❌ Could not read data from the Excel file.")
