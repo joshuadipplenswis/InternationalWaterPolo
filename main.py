@@ -51,10 +51,10 @@ def cohen_d(x, y):
 def main():
     st.title("📊 Water Polo International Analysis Page")
 
-    # ✅ Load Excel from repo (adjust if you keep in /data folder)
+    # ✅ Load Excel from repo
     DATA_PATH = Path(__file__).parent / "Winning_Losing_Teams.xlsx"
-    # If you moved it to data/, use:
-    # DATA_PATH = Path(__file__).parent / "data" / "Winning_Losing_Teams.xlsx"
+
+    st.write(f"Looking for file at: {DATA_PATH}")
 
     df_win = read_excel_table(DATA_PATH, "Winning Teams", "Table1")
     df_loss = read_excel_table(DATA_PATH, "Losing Teams", "Table2")
