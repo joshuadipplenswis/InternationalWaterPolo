@@ -137,11 +137,11 @@ def main():
             # ➕ Explanation for coaches
             st.markdown("""
             **ℹ️ What is Cohen’s d?**  
-            Cohen’s d measures how different winning and losing teams are for each stat.  
+            Cohen’s d is a measurement of the significance of difference between winning and losing statistics.
             - **0.2 = small difference**  
             - **0.5 = moderate difference**  
             - **0.8+ = large difference**  
-            The bigger the number, the more that stat separates wins from losses.
+            The larger the number, the more the statistic separates wins from losses.
             """)
 
             fig, ax = plt.subplots(figsize=(10, 8))
