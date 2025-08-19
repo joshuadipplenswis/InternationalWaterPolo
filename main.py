@@ -55,17 +55,29 @@ def cohen_d(x, y):
 def main():
     st.title("📊 Water Polo International Analysis Page")
 
-    from pathlib import Path
-
-    # Always resolve relative to the app directory
     DATA_PATH = Path(__file__).parent / "Winning_Losing_Teams.xlsx"
-    st.write(f"Looking for file at: {DATA_PATH.resolve()}")  # Debug: shows the full absolute path
+    st.write(f"Looking for file at: {DATA_PATH}")
 
-    df_win = read_excel_table(DATA_PATH, "Winning Teams", "Table1")
-    df_loss = read_excel_table(DATA_PATH, "Losing Teams", "Table2")
+    if not DATA_PATH.exists():
+        st.error(f"❌ File not found at {DATA_PATH}. Did you push it to GitHub?")
+        st.stop()
 
-    if df_win is None or df_loss is None:
-        st.error("❌ Could not read data from the Excel file.")
+    try:
+        # Load workbook just to check sheet names
+        wb = openpyxl.load_workbook(DATA_PATH, data_only=True)
+        st.write("✅ Found Excel file!")
+        st.write("Available sheets:", wb.sheetnames)
+
+        # Try reading the sheets/tables
+        df_win = read_excel_table(DATA_PATH, "Winning Teams", "Table1")
+        df_loss = read_excel_table(DATA_PATH, "Losing Teams", "Table2")
+
+        if df_win is None or df_loss is None:
+            st.error("❌ Could not read data from the Excel tables. Check sheet/table names.")
+            st.stop()
+
+    except Exception as e:
+        st.error(f"❌ Error while opening Excel file: {e}")
         st.stop()
 
         # 👇 Competition filter
