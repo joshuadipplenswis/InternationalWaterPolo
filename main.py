@@ -1,5 +1,6 @@
 import os
-os.environ["STREAMLIT_DISABLE_WATCHDOG_WARNING"] = "true"
+# Disable inotify watcher, force polling
+os.environ["STREAMLIT_WATCHER_TYPE"] = "poll"
 os.environ["WATCHDOG_DISABLE_FILE_WATCHING"] = "true"
 import streamlit as st
 import pandas as pd
