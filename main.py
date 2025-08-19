@@ -74,11 +74,9 @@ def main():
 
     if df_win is not None:
         st.success("Loaded Winning Teams sheet ✅")
-        st.write(df_win.head())
 
     if df_loss is not None:
         st.success("Loaded Losing Teams sheet ✅")
-        st.write(df_loss.head())
 
         # 👇 Competition filter
         if 'Competition' in df_win.columns and 'Competition' in df_loss.columns:
