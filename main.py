@@ -2,6 +2,7 @@ import os
 # Disable inotify watcher, force polling
 os.environ["STREAMLIT_WATCHER_TYPE"] = "poll"
 os.environ["WATCHDOG_DISABLE_FILE_WATCHING"] = "true"
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -13,25 +14,30 @@ from pathlib import Path  # ✅ correct import
 
 st.set_page_config(layout="wide")
 
+
 def read_excel_table(file, sheet_name: str, table_name: str):
     try:
         wb = openpyxl.load_workbook(file, data_only=True)
         sheet = wb[sheet_name]
-        table = sheet.tables[table_name]
-        ref = table.ref
 
-        # Parse the cell range from the reference
-        min_col, min_row, max_col, max_row = openpyxl.utils.range_boundaries(ref)
+        if table_name in sheet.tables:
+            # ✅ Case 1: Use the Excel table range
+            table = sheet.tables[table_name]
+            ref = table.ref
+            min_col, min_row, max_col, max_row = openpyxl.utils.range_boundaries(ref)
 
-        # Read the values from the sheet
-        data = []
-        for row in sheet.iter_rows(min_row=min_row, max_row=max_row,
-                                   min_col=min_col, max_col=max_col,
-                                   values_only=True):
-            data.append(row)
+            data = []
+            for row in sheet.iter_rows(min_row=min_row, max_row=max_row,
+                                       min_col=min_col, max_col=max_col,
+                                       values_only=True):
+                data.append(row)
 
-        # Convert to DataFrame
-        df = pd.DataFrame(data[1:], columns=data[0])
+            df = pd.DataFrame(data[1:], columns=data[0])
+        else:
+            # ⚡ Case 2: No table found, read whole sheet
+            data = sheet.values
+            cols = next(data)  # first row as header
+            df = pd.DataFrame(data, columns=cols)
 
         # Drop unnamed columns
         df = df.loc[:, ~df.columns.astype(str).str.startswith('Unnamed')]
@@ -39,7 +45,7 @@ def read_excel_table(file, sheet_name: str, table_name: str):
         return df
 
     except Exception as e:
-        st.error(f"❌ Error reading table '{table_name}' from sheet '{sheet_name}': {e}")
+        st.error(f"❌ Error reading from sheet '{sheet_name}': {e}")
         return None
 
 
@@ -51,60 +57,28 @@ def cohen_d(x, y):
                          (nx + ny - 2))
     return (np.mean(x) - np.mean(y)) / pooled_std if pooled_std != 0 else 0
 
-        def read_excel_table(file, sheet_name: str, table_name: str):
-            try:
-                wb = openpyxl.load_workbook(file, data_only=True)
-                sheet = wb[sheet_name]
 
-                if table_name in sheet.tables:
-                    # ✅ Case 1: Use the Excel table range
-                    table = sheet.tables[table_name]
-                    ref = table.ref
-                    min_col, min_row, max_col, max_row = openpyxl.utils.range_boundaries(ref)
+def main():
+    st.title("📊 Water Polo International Analysis Page")
 
-                    data = []
-                    for row in sheet.iter_rows(min_row=min_row, max_row=max_row,
-                                               min_col=min_col, max_col=max_col,
-                                               values_only=True):
-                        data.append(row)
+    DATA_PATH = Path(__file__).parent / "Winning_Losing_Teams.xlsx"
+    st.write(f"Looking for file at: {DATA_PATH}")
 
-                    df = pd.DataFrame(data[1:], columns=data[0])
-                else:
-                    # ⚡ Case 2: No table found, read whole sheet
-                    data = sheet.values
-                    cols = next(data)  # first row as header
-                    df = pd.DataFrame(data, columns=cols)
+    if not DATA_PATH.exists():
+        st.error(f"❌ File not found at {DATA_PATH}. Did you push it to GitHub?")
+        st.stop()
 
-                # Drop unnamed columns
-                df = df.loc[:, ~df.columns.astype(str).str.startswith('Unnamed')]
+    # ✅ Now this function will be available here
+    df_win = read_excel_table(DATA_PATH, "Winning Teams", "Table1")
+    df_loss = read_excel_table(DATA_PATH, "Losing Teams", "Table2")
 
-                return df
+    if df_win is not None:
+        st.success("Loaded Winning Teams sheet ✅")
+        st.write(df_win.head())
 
-            except Exception as e:
-                st.error(f"❌ Error reading from sheet '{sheet_name}': {e}")
-                return None
-
-        def main():
-            st.title("📊 Water Polo International Analysis Page")
-
-            DATA_PATH = Path(__file__).parent / "Winning_Losing_Teams.xlsx"
-            st.write(f"Looking for file at: {DATA_PATH}")
-
-            if not DATA_PATH.exists():
-                st.error(f"❌ File not found at {DATA_PATH}. Did you push it to GitHub?")
-                st.stop()
-
-            # ✅ Now this function will be available here
-            df_win = read_excel_table(DATA_PATH, "Winning Teams", "Table1")
-            df_loss = read_excel_table(DATA_PATH, "Losing Teams", "Table2")
-
-            if df_win is not None:
-                st.success("Loaded Winning Teams sheet ✅")
-                st.write(df_win.head())
-
-            if df_loss is not None:
-                st.success("Loaded Losing Teams sheet ✅")
-                st.write(df_loss.head())
+    if df_loss is not None:
+        st.success("Loaded Losing Teams sheet ✅")
+        st.write(df_loss.head())
 
         # 👇 Competition filter
         if 'Competition' in df_win.columns and 'Competition' in df_loss.columns:
