@@ -51,17 +51,6 @@ def cohen_d(x, y):
                          (nx + ny - 2))
     return (np.mean(x) - np.mean(y)) / pooled_std if pooled_std != 0 else 0
 
-
-def main():
-    st.title("📊 Water Polo International Analysis Page")
-
-    DATA_PATH = Path(__file__).parent / "Winning_Losing_Teams.xlsx"
-    st.write(f"Looking for file at: {DATA_PATH}")
-
-    if not DATA_PATH.exists():
-        st.error(f"❌ File not found at {DATA_PATH}. Did you push it to GitHub?")
-        st.stop()
-
         def read_excel_table(file, sheet_name: str, table_name: str):
             try:
                 wb = openpyxl.load_workbook(file, data_only=True)
@@ -94,6 +83,28 @@ def main():
             except Exception as e:
                 st.error(f"❌ Error reading from sheet '{sheet_name}': {e}")
                 return None
+
+        def main():
+            st.title("📊 Water Polo International Analysis Page")
+
+            DATA_PATH = Path(__file__).parent / "Winning_Losing_Teams.xlsx"
+            st.write(f"Looking for file at: {DATA_PATH}")
+
+            if not DATA_PATH.exists():
+                st.error(f"❌ File not found at {DATA_PATH}. Did you push it to GitHub?")
+                st.stop()
+
+            # ✅ Now this function will be available here
+            df_win = read_excel_table(DATA_PATH, "Winning Teams", "Table1")
+            df_loss = read_excel_table(DATA_PATH, "Losing Teams", "Table2")
+
+            if df_win is not None:
+                st.success("Loaded Winning Teams sheet ✅")
+                st.write(df_win.head())
+
+            if df_loss is not None:
+                st.success("Loaded Losing Teams sheet ✅")
+                st.write(df_loss.head())
 
         # 👇 Competition filter
         if 'Competition' in df_win.columns and 'Competition' in df_loss.columns:
