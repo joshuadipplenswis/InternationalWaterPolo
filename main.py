@@ -51,10 +51,11 @@ def cohen_d(x, y):
 def main():
     st.title("📊 Water Polo International Analysis Page")
 
-    # ✅ Load Excel from repo
-    DATA_PATH = Path(__file__).parent / "Winning_Losing_Teams.xlsx"
+    from pathlib import Path
 
-    st.write(f"Looking for file at: {DATA_PATH}")
+    # Always resolve relative to the app directory
+    DATA_PATH = Path(__file__).parent / "Winning_Losing_Teams.xlsx"
+    st.write(f"Looking for file at: {DATA_PATH.resolve()}")  # Debug: shows the full absolute path
 
     df_win = read_excel_table(DATA_PATH, "Winning Teams", "Table1")
     df_loss = read_excel_table(DATA_PATH, "Losing Teams", "Table2")
