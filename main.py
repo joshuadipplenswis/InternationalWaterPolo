@@ -62,23 +62,38 @@ def main():
         st.error(f"❌ File not found at {DATA_PATH}. Did you push it to GitHub?")
         st.stop()
 
-    try:
-        # Load workbook just to check sheet names
-        wb = openpyxl.load_workbook(DATA_PATH, data_only=True)
-        st.write("✅ Found Excel file!")
-        st.write("Available sheets:", wb.sheetnames)
+        def read_excel_table(file, sheet_name: str, table_name: str):
+            try:
+                wb = openpyxl.load_workbook(file, data_only=True)
+                sheet = wb[sheet_name]
 
-        # Try reading the sheets/tables
-        df_win = read_excel_table(DATA_PATH, "Winning Teams", "Table1")
-        df_loss = read_excel_table(DATA_PATH, "Losing Teams", "Table2")
+                if table_name in sheet.tables:
+                    # ✅ Case 1: Use the Excel table range
+                    table = sheet.tables[table_name]
+                    ref = table.ref
+                    min_col, min_row, max_col, max_row = openpyxl.utils.range_boundaries(ref)
 
-        if df_win is None or df_loss is None:
-            st.error("❌ Could not read data from the Excel tables. Check sheet/table names.")
-            st.stop()
+                    data = []
+                    for row in sheet.iter_rows(min_row=min_row, max_row=max_row,
+                                               min_col=min_col, max_col=max_col,
+                                               values_only=True):
+                        data.append(row)
 
-    except Exception as e:
-        st.error(f"❌ Error while opening Excel file: {e}")
-        st.stop()
+                    df = pd.DataFrame(data[1:], columns=data[0])
+                else:
+                    # ⚡ Case 2: No table found, read whole sheet
+                    data = sheet.values
+                    cols = next(data)  # first row as header
+                    df = pd.DataFrame(data, columns=cols)
+
+                # Drop unnamed columns
+                df = df.loc[:, ~df.columns.astype(str).str.startswith('Unnamed')]
+
+                return df
+
+            except Exception as e:
+                st.error(f"❌ Error reading from sheet '{sheet_name}': {e}")
+                return None
 
         # 👇 Competition filter
         if 'Competition' in df_win.columns and 'Competition' in df_loss.columns:
