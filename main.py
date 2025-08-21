@@ -1,5 +1,8 @@
+# -----------------------------
+# Environment / Imports
+# -----------------------------
 import os
-# Disable inotify watcher, force polling
+# Disable inotify watcher, force polling (helps on Streamlit Cloud)
 os.environ["STREAMLIT_WATCHER_TYPE"] = "poll"
 os.environ["WATCHDOG_DISABLE_FILE_WATCHING"] = "true"
 
@@ -10,33 +13,45 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import ttest_ind
 import openpyxl
-from pathlib import Path  # ✅ correct import
+from pathlib import Path
+
+# Optional: import plotly globally (you also import inline later if you prefer)
+import plotly.express as px
 
 st.set_page_config(layout="wide")
 
-
-def read_excel_table(file, sheet_name: str, table_name: str):
+# -----------------------------
+# Helpers
+# -----------------------------
+@st.cache_data(show_spinner=False)
+def read_excel_table(path: Path, sheet_name: str, table_name: str):
+    """
+    Read an Excel 'table' by name from a given sheet.
+    If the table is missing, fall back to reading the entire sheet.
+    """
     try:
-        wb = openpyxl.load_workbook(file, data_only=True)
+        wb = openpyxl.load_workbook(path, data_only=True, read_only=False)
         sheet = wb[sheet_name]
 
         if table_name in sheet.tables:
-            # ✅ Case 1: Use the Excel table range
+            # Case 1: read the named Excel table range
             table = sheet.tables[table_name]
             ref = table.ref
             min_col, min_row, max_col, max_row = openpyxl.utils.range_boundaries(ref)
 
             data = []
-            for row in sheet.iter_rows(min_row=min_row, max_row=max_row,
-                                       min_col=min_col, max_col=max_col,
-                                       values_only=True):
+            for row in sheet.iter_rows(
+                min_row=min_row, max_row=max_row,
+                min_col=min_col, max_col=max_col,
+                values_only=True
+            ):
                 data.append(row)
 
             df = pd.DataFrame(data[1:], columns=data[0])
         else:
-            # ⚡ Case 2: No table found, read whole sheet
+            # Case 2: no table; read whole sheet using the first row as header
             data = sheet.values
-            cols = next(data)  # first row as header
+            cols = next(data)
             df = pd.DataFrame(data, columns=cols)
 
         # Drop unnamed columns
@@ -58,29 +73,38 @@ def cohen_d(x, y):
     return (np.mean(x) - np.mean(y)) / pooled_std if pooled_std != 0 else 0
 
 
+# -----------------------------
+# Main
+# -----------------------------
 def main():
     st.title("📊 Water Polo International Analysis Page")
 
+    # -------------------------
+    # Load data from repo root
+    # -------------------------
     DATA_PATH = Path(__file__).parent / "Winning_Losing_Teams.xlsx"
-    st.write(f"Looking for file at: {DATA_PATH}")
+    # (Keep this line if you want a quick on-screen check)
+    # st.write(f"Looking for file at: {DATA_PATH}")
 
     if not DATA_PATH.exists():
         st.error(f"❌ File not found at {DATA_PATH}. Did you push it to GitHub?")
         st.stop()
 
-    # ✅ Now this function will be available here
+    # Read sheets (table fallback supported)
     df_win = read_excel_table(DATA_PATH, "Winning Teams", "Table1")
     df_loss = read_excel_table(DATA_PATH, "Losing Teams", "Table2")
 
-    if df_win is not None:
-        st.success("Loaded Winning Teams sheet ✅")
+    if df_win is None or df_loss is None:
+        st.error("❌ Could not read data from the Excel file.")
+        st.stop()
 
-    if df_loss is not None:
-        st.success("Loaded Losing Teams sheet ✅")
+    # -----------------------------------------
+    # 1) Global filter (applies to ALL tabs)
+    # -----------------------------------------
+    with st.container():
+        st.markdown("### 🔍 Filter by Competition")
 
-        # 👇 Competition filter
         if 'Competition' in df_win.columns and 'Competition' in df_loss.columns:
-            st.markdown("### 🔍 Filter by Competition")
             competition_options = sorted(set(df_win['Competition'].dropna()) | set(df_loss['Competition'].dropna()))
             selected_competitions = st.multiselect(
                 "Select Competitions to Include",
@@ -88,29 +112,50 @@ def main():
                 default=competition_options
             )
             if selected_competitions:
-                df_win = df_win[df_win['Competition'].isin(selected_competitions)]
-                df_loss = df_loss[df_loss['Competition'].isin(selected_competitions)]
+                df_win_filtered = df_win[df_win['Competition'].isin(selected_competitions)].copy()
+                df_loss_filtered = df_loss[df_loss['Competition'].isin(selected_competitions)].copy()
+            else:
+                df_win_filtered = df_win.copy()
+                df_loss_filtered = df_loss.copy()
         else:
-            st.warning("⚠️ 'Competition' column not found in one or both sheets.")
+            st.warning("⚠️ 'Competition' column not found in one or both sheets. Showing all data.")
+            df_win_filtered = df_win.copy()
+            df_loss_filtered = df_loss.copy()
 
+    # Common numeric columns used throughout
+    num_cols = df_win_filtered.select_dtypes(include=np.number).columns.intersection(
+        df_loss_filtered.select_dtypes(include=np.number).columns
+    )
+
+    # -----------------------------------------
+    # 2) Tabs
+    # -----------------------------------------
+    tabs = st.tabs([
+        "🏠 Home",
+        "📊 Statistically Significant Differences",
+        "📈 Performance Index",
+        "🆚 Comparison Table",
+        "🔍 Team Breakdown"
+    ])
+
+    # -------------------------
+    # Tab 0: HOME
+    # -------------------------
+    with tabs[0]:
         try:
-            # Drop non-numeric for analysis and align columns
-            num_cols = df_win.select_dtypes(include=np.number).columns.intersection(df_loss.select_dtypes(include=np.number).columns)
-
-            import plotly.express as px
+            st.subheader("📌 Global Average Comparison (Winning vs Losing Teams)")
 
             # Global Summary
-            avg_win = df_win[num_cols].mean()
-            avg_loss = df_loss[num_cols].mean()
+            avg_win = df_win_filtered[num_cols].mean()
+            avg_loss = df_loss_filtered[num_cols].mean()
 
-            global_df = pd.DataFrame({'Winning Teams': avg_win, 'Losing Teams': avg_loss})
-            global_df = global_df.sort_index()
+            global_df = pd.DataFrame({'Winning Teams': avg_win, 'Losing Teams': avg_loss}).sort_index()
 
-            # Reset and melt for Plotly format
+            # Plotly-friendly
             global_df_reset = global_df.reset_index().rename(columns={'index': 'Statistic'})
-            global_df_melted = global_df_reset.melt(id_vars='Statistic', var_name='Result', value_name='Average Value')
-
-            st.subheader("📌 Global Average Comparison (Winning vs Losing Teams)")
+            global_df_melted = global_df_reset.melt(
+                id_vars='Statistic', var_name='Result', value_name='Average Value'
+            )
 
             fig = px.bar(
                 global_df_melted,
@@ -124,320 +169,350 @@ def main():
                 color_discrete_map={'Winning Teams': '#66c2a5', 'Losing Teams': '#fc8d62'},
                 height=800
             )
-
             fig.update_layout(xaxis_title="Average Value", yaxis_title="Statistic")
             st.plotly_chart(fig, use_container_width=True)
 
-            # Cohen's d
-            d_values = {col: cohen_d(df_win[col].dropna(), df_loss[col].dropna()) for col in num_cols}
-            d_df = pd.DataFrame.from_dict(d_values, orient='index', columns=['Cohen_d']).sort_values('Cohen_d', key=abs)
+        except Exception as e:
+            st.error(f"❌ Error rendering Home tab: {e}")
+
+    # -------------------------
+    # Tab 1: Statistically Significant Differences (Cohen's d)
+    # -------------------------
+    with tabs[1]:
+        try:
+            # Compute Cohen's d for all numeric columns
+            d_values = {col: cohen_d(df_win_filtered[col].dropna(), df_loss_filtered[col].dropna())
+                        for col in num_cols}
+            d_df = pd.DataFrame.from_dict(d_values, orient='index', columns=['Cohen_d']) \
+                               .sort_values('Cohen_d', key=np.abs)
 
             st.subheader("📌 Cohen's d of Global Differences")
 
-            # ➕ Explanation for coaches
+            # ➕ Coach-friendly explanation
             st.markdown("""
             **ℹ️ What is Cohen’s d?**  
-            Cohen’s d is a measurement of the significance of difference between winning and losing statistics.
-            - **0.2 = small difference**  
-            - **0.5 = moderate difference**  
-            - **0.8+ = large difference**  
-            The larger the number, the more the statistic separates wins from losses.
+            Cohen’s d measures **how strongly a stat differs** between wins and losses.
+            - **0.2 ≈ small difference**  
+            - **0.5 ≈ moderate difference**  
+            - **0.8+ ≈ large difference**  
+            The larger the absolute value, the more that statistic separates wins from losses.
             """)
 
+            # Bar plot with seaborn / matplotlib
             fig, ax = plt.subplots(figsize=(10, 8))
             sns.barplot(x='Cohen_d', y=d_df.index, data=d_df, ax=ax)
             ax.set_xlabel("Cohen's d Value")
             ax.set_ylabel("Statistic")
             st.pyplot(fig)
 
-            # Create a dictionary of Cohen's d values from common numeric stats
+            # Optional: build dict of Cohen's d for downstream usage
             try:
-                common_stats = list(set(df_win.columns) & set(df_loss.columns))
-
-                # Filter for strictly numeric columns only (and exclude timedelta columns)
-                valid_numeric_cols = df_win[common_stats].select_dtypes(include=[np.number]).columns
-                ignore_cols = ['Days Since Latest', 'Time Weight']  # Add any others you calculate manually
+                common_stats = list(set(df_win_filtered.columns) & set(df_loss_filtered.columns))
+                valid_numeric_cols = df_win_filtered[common_stats].select_dtypes(include=[np.number]).columns
+                ignore_cols = ['Days Since Latest', 'Time Weight']
                 common_stats = [col for col in valid_numeric_cols if col not in ignore_cols]
 
                 cohen_d_values = {}
                 for stat in common_stats:
-                    x = df_win[stat].dropna()
-                    y = df_loss[stat].dropna()
+                    x = df_win_filtered[stat].dropna()
+                    y = df_loss_filtered[stat].dropna()
                     if len(x) > 1 and len(y) > 1:
                         cohen_d_values[stat] = cohen_d(x, y)
 
                 cohen_d_df = pd.DataFrame.from_dict(cohen_d_values, orient='index', columns=['Cohen_d'])
+                # Store in session for reuse (e.g., Performance Index)
+                st.session_state["cohen_d_df"] = cohen_d_df
             except Exception as e:
-                st.error(f"Error computing Cohen's d values: {e}")
-                cohen_d_df = pd.DataFrame()  # fallback to empty if error
+                st.error(f"Error computing Cohen's d table for reuse: {e}")
 
-            st.subheader("📌 Performance Index")
+        except Exception as e:
+            st.error(f"❌ Error rendering Cohen's d tab: {e}")
 
-            st.markdown("""
-            **ℹ️ What contributes to the Performance Index?**
+    # -------------------------
+    # Tab 2: Performance Index
+    # -------------------------
+    with tabs[2]:
+        st.subheader("📌 Performance Index")
 
-            The Performance Index is a weighted combination of:
-            - **Win Rate** (50% weight)
-            - **Average Goal Margin**: Goals Scored minus Goals Conceded (20% weight)
-            - **Key Match Statistics**: Weighted by Cohen’s d values, showing which stats most distinguish wins from losses (30% weight)
-            """)
+        st.markdown("""
+        **ℹ️ What contributes to the Performance Index?**
 
-            # 🔝 Calculate and visualize weighted team performance index (no 'Goal Difference' required)
-            with st.expander("🔝 Team Rankings by Performance Index", expanded=True):
-                try:
-                    # Merge winning and losing data
-                    df_win['Result'] = 'Win'
-                    df_loss['Result'] = 'Lose'
-                    df_combined = pd.concat([df_win, df_loss], ignore_index=True)
+        The Performance Index is a weighted combination of:
+        - **Win Rate** (50% weight)
+        - **Average Goal Margin**: Goals Scored minus Goals Conceded (20% weight)
+        - **Key Match Statistics**: Weighted by Cohen’s d values, showing which stats most distinguish wins from losses (30% weight)
+        """)
 
-                    # --- Time Decay Weighting ---
-                    df_combined['Date'] = pd.to_datetime(df_combined['Date'], errors='coerce')
-                    df_combined = df_combined.dropna(subset=['Date'])  # Ensure no null dates
-                    latest_date = df_combined['Date'].max()
-                    df_combined['Days Since Latest'] = (latest_date - df_combined['Date']).dt.days
-                    decay_rate = 0.005  # You can tweak this for faster/slower decay
-                    df_combined['Time Weight'] = np.exp(-decay_rate * df_combined['Days Since Latest'])
+        with st.expander("🔝 Team Rankings by Performance Index", expanded=True):
+            try:
+                # Merge winning and losing data
+                df_win_f = df_win_filtered.copy()
+                df_loss_f = df_loss_filtered.copy()
 
-                    # ✅ Step 1: Compute Cohen's d
+                df_win_f['Result'] = 'Win'
+                df_loss_f['Result'] = 'Lose'
+                df_combined = pd.concat([df_win_f, df_loss_f], ignore_index=True)
+
+                # --- Time Decay Weighting ---
+                df_combined['Date'] = pd.to_datetime(df_combined.get('Date', pd.NaT), errors='coerce')
+                df_combined = df_combined.dropna(subset=['Date'])
+                latest_date = df_combined['Date'].max()
+                df_combined['Days Since Latest'] = (latest_date - df_combined['Date']).dt.days
+                decay_rate = 0.005  # tune if needed
+                df_combined['Time Weight'] = np.exp(-decay_rate * df_combined['Days Since Latest'])
+
+                # ✅ Step 1: Cohen's d (reuse if available)
+                if "cohen_d_df" in st.session_state and not st.session_state["cohen_d_df"].empty:
+                    cohen_d_df = st.session_state["cohen_d_df"].copy()
+                else:
                     numeric_stats = df_combined.select_dtypes(include=[np.number]).columns.tolist()
                     ignore_cols = ['Days Since Latest', 'Time Weight']
-                    numeric_stats = [col for col in numeric_stats if col not in ignore_cols]
-
+                    numeric_stats = [c for c in numeric_stats if c not in ignore_cols]
                     cohen_d_values = {}
                     for stat in numeric_stats:
-                        x = df_win[stat].dropna()
-                        y = df_loss[stat].dropna()
+                        x = df_win_filtered.get(stat, pd.Series(dtype=float)).dropna()
+                        y = df_loss_filtered.get(stat, pd.Series(dtype=float)).dropna()
                         if len(x) > 1 and len(y) > 1:
                             pooled_std = np.sqrt(
-                                ((len(x) - 1) * x.std(ddof=1) ** 2 + (len(y) - 1) * y.std(ddof=1) ** 2) / (
-                                            len(x) + len(y) - 2)
+                                ((len(x) - 1) * x.std(ddof=1) ** 2 +
+                                 (len(y) - 1) * y.std(ddof=1) ** 2) /
+                                (len(x) + len(y) - 2)
                             )
                             d = (x.mean() - y.mean()) / pooled_std if pooled_std != 0 else 0
                             cohen_d_values[stat] = abs(d)
-
                     cohen_d_df = pd.DataFrame.from_dict(cohen_d_values, orient='index', columns=['Cohen_d'])
 
-                    # ✅ Step 2: Calculate team-level stats with time weights
-                    team_stats = []
-                    all_teams = pd.unique(df_combined[['Winning Team', 'Losing Team']].values.ravel('K'))
-                    all_teams = [team for team in all_teams if pd.notna(team)]
+                # ✅ Step 2: Team-level stats with time weights
+                team_stats = []
+                all_teams = pd.unique(df_combined[['Winning Team', 'Losing Team']].values.ravel('K'))
+                all_teams = [t for t in all_teams if pd.notna(t)]
 
-                    for team in all_teams:
-                        team_games = df_combined[
-                            (df_combined['Winning Team'] == team) | (df_combined['Losing Team'] == team)
-                            ].copy()
+                relevant_stats = list(cohen_d_df.index) if not cohen_d_df.empty else []
 
-                        if team_games.empty:
-                            continue
+                for team in all_teams:
+                    team_games = df_combined[
+                        (df_combined['Winning Team'] == team) | (df_combined['Losing Team'] == team)
+                    ].copy()
+                    if team_games.empty:
+                        continue
 
-                        # Win Rate
-                        wins = team_games[team_games['Winning Team'] == team]
-                        losses = team_games[team_games['Losing Team'] == team]
-                        total_games = len(wins) + len(losses)
-                        win_rate = len(wins) / total_games if total_games else 0
+                    # Win Rate
+                    wins = team_games[team_games['Winning Team'] == team]
+                    losses = team_games[team_games['Losing Team'] == team]
+                    total_games = len(wins) + len(losses)
+                    win_rate = len(wins) / total_games if total_games else 0
 
-                        # Goal Margin
-                        margin_list = []
-                        for _, row in wins.iterrows():
-                            if pd.notna(row.get('Goals Scored')) and pd.notna(row.get('Goals Conceded')):
-                                margin_list.append(row['Goals Scored'] - row['Goals Conceded'])
-                        for _, row in losses.iterrows():
-                            if pd.notna(row.get('Goals Scored')) and pd.notna(row.get('Goals Conceded')):
-                                margin_list.append(row['Goals Scored'] - row['Goals Conceded'])
-                        avg_margin = np.mean(margin_list) if margin_list else 0
+                    # Goal Margin (use rows where the team appears; both wins and losses rows have goals)
+                    margin_list = []
+                    for _, row in team_games.iterrows():
+                        gs = row.get('Goals Scored')
+                        gc = row.get('Goals Conceded')
+                        if pd.notna(gs) and pd.notna(gc):
+                            margin_list.append(gs - gc)
+                    avg_margin = np.mean(margin_list) if margin_list else 0
 
-                        # Weighted average of all relevant stats using time decay
-                        relevant_stats = list(cohen_d_df.index)
+                    # Weighted average of relevant stats
+                    if relevant_stats:
                         team_stat_df = team_games.copy()
                         team_stat_df['Is Team'] = (
-                                (team_stat_df['Winning Team'] == team) | (team_stat_df['Losing Team'] == team)
+                            (team_stat_df['Winning Team'] == team) | (team_stat_df['Losing Team'] == team)
                         )
                         team_stat_df = team_stat_df[team_stat_df['Is Team']]
-                        team_stat_df = team_stat_df[relevant_stats + ['Time Weight']].dropna(subset=relevant_stats)
-
-                        if not team_stat_df.empty:
-                            weighted_stats = (
-                                team_stat_df[relevant_stats].multiply(team_stat_df['Time Weight'], axis=0)).sum()
-                            total_weight = team_stat_df['Time Weight'].sum()
-                            weighted_avg_stats = (weighted_stats / total_weight) if total_weight > 0 else pd.Series(0,
-                                                                                                                    index=relevant_stats)
+                        avail_stats = [s for s in relevant_stats if s in team_stat_df.columns]
+                        if avail_stats:
+                            team_stat_df = team_stat_df[avail_stats + ['Time Weight']].dropna(subset=avail_stats)
+                            if not team_stat_df.empty:
+                                weighted_stats = (
+                                    team_stat_df[avail_stats].multiply(team_stat_df['Time Weight'], axis=0)
+                                ).sum()
+                                total_weight = team_stat_df['Time Weight'].sum()
+                                weighted_avg_stats = (
+                                    weighted_stats / total_weight if total_weight > 0
+                                    else pd.Series(0, index=avail_stats)
+                                )
+                            else:
+                                weighted_avg_stats = pd.Series(0, index=avail_stats)
                         else:
-                            weighted_avg_stats = pd.Series(0, index=relevant_stats)
+                            weighted_avg_stats = pd.Series(dtype=float)
+                    else:
+                        weighted_avg_stats = pd.Series(dtype=float)
 
-                        team_data = {
-                            'Team': team,
-                            'Win Rate': win_rate,
-                            'Goal Margin': avg_margin,
-                        }
-                        team_data.update(weighted_avg_stats)
-                        team_stats.append(team_data)
+                    team_data = {'Team': team, 'Win Rate': win_rate, 'Goal Margin': avg_margin}
+                    if not weighted_avg_stats.empty:
+                        team_data.update(weighted_avg_stats.to_dict())
+                    team_stats.append(team_data)
 
-                    df_perf = pd.DataFrame(team_stats).set_index('Team').fillna(0)
+                df_perf = pd.DataFrame(team_stats).set_index('Team').fillna(0)
 
-                    # ✅ Step 3: Stat Score using Cohen's d
-                    # Define stats where lower values are better
-                    lower_is_better_stats = {
-                        "Goals Conceded",
-                        "Penalties Conceded",
-                        "Missed Shots",
-                        "Shots Blocked",
-                        "SoT Conceded",
-                        "Exclusions Conceded",
-                        "Pass to CF Conceded",
-                        "Pass to CF - Outcome"
-                    }
+                # ✅ Step 3: Stat Score with “higher is better” alignment
+                lower_is_better_stats = {
+                    "Goals Conceded",
+                    "Penalties Conceded",
+                    "Missed Shots",
+                    "Shots Blocked",
+                    "SoT Conceded",
+                    "Exclusions Conceded",
+                    "Pass to CF Conceded",
+                    "Pass to CF - Outcome"
+                }
 
-                    # Adjust stats so that all are "higher is better" by inverting where needed
-                    adjusted_stats = df_perf[relevant_stats].copy()
-
-                    for stat in relevant_stats:
+                if not cohen_d_df.empty:
+                    rel_stats_in_perf = [s for s in cohen_d_df.index if s in df_perf.columns]
+                    adjusted_stats = df_perf[rel_stats_in_perf].copy()
+                    for stat in rel_stats_in_perf:
                         if stat in lower_is_better_stats:
                             max_val = df_perf[stat].max()
-                            adjusted_stats[stat] = max_val - df_perf[stat]  # invert the scale
+                            adjusted_stats[stat] = max_val - df_perf[stat]
 
-                    # Recalculate the stat score with adjusted values
-                    df_perf['Stat Score'] = adjusted_stats.mul(cohen_d_df['Cohen_d'], axis=1).sum(axis=1)
+                    # align weights
+                    weights = cohen_d_df.loc[rel_stats_in_perf, 'Cohen_d']
+                    df_perf['Stat Score'] = adjusted_stats.mul(weights, axis=1).sum(axis=1)
+                else:
+                    df_perf['Stat Score'] = 0.0
 
-                    # ✅ Step 4: Final Performance Index
-                    df_perf['Performance Index'] = (
-                            df_perf['Win Rate'] * 0.5 +
-                            (df_perf['Goal Margin'] / df_perf['Goal Margin'].abs().max() if df_perf[
-                                                                                                'Goal Margin'].abs().max() != 0 else 0) * 0.2 +
-                            (df_perf['Stat Score'] / df_perf['Stat Score'].max() if df_perf[
-                                                                                        'Stat Score'].max() != 0 else 0) * 0.3
-                    )
+                # ✅ Step 4: Final Performance Index
+                # Safe divisors
+                gm_div = df_perf['Goal Margin'].abs().max()
+                ss_div = df_perf['Stat Score'].max()
 
-                    # ✅ Step 5: Plotly Chart
-                    import plotly.express as px
-                    sorted_perf = df_perf.sort_values("Performance Index", ascending=False).reset_index()
+                df_perf['Performance Index'] = (
+                    df_perf['Win Rate'] * 0.5 +
+                    ((df_perf['Goal Margin'] / gm_div) if gm_div and gm_div != 0 else 0) * 0.2 +
+                    ((df_perf['Stat Score'] / ss_div) if ss_div and ss_div != 0 else 0) * 0.3
+                )
 
-                    fig = px.bar(
-                        sorted_perf,
-                        x="Performance Index",
-                        y="Team",
-                        orientation='h',
-                        text="Performance Index",
-                        title="🔝 Team Performance Index Ranking (Time-Weighted)",
-                        color="Performance Index",
-                        color_continuous_scale="Blues"
-                    )
-                    fig.update_layout(
-                        yaxis=dict(autorange="reversed"),
-                        xaxis_title="Performance Index",
-                        yaxis_title="Team",
-                        margin=dict(l=100, r=20, t=50, b=40),
-                        height=600
-                    )
-                    fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-                    st.plotly_chart(fig, use_container_width=True)
+                # ✅ Step 5: Plotly Chart
+                sorted_perf = df_perf.sort_values("Performance Index", ascending=False).reset_index()
 
-                except Exception as e:
-                    st.error(f"Error calculating performance index: {e}")
+                fig = px.bar(
+                    sorted_perf,
+                    x="Performance Index",
+                    y="Team",
+                    orientation='h',
+                    text="Performance Index",
+                    title="🔝 Team Performance Index Ranking (Time-Weighted)",
+                    color="Performance Index",
+                    color_continuous_scale="Blues",
+                    height=600
+                )
+                fig.update_layout(
+                    yaxis=dict(autorange="reversed"),
+                    xaxis_title="Performance Index",
+                    yaxis_title="Team",
+                    margin=dict(l=100, r=20, t=50, b=40),
+                )
+                fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                st.plotly_chart(fig, use_container_width=True)
 
-            # ⬇️ Team Statistic Comparison Table
+            except Exception as e:
+                st.error(f"Error calculating performance index: {e}")
 
-            st.subheader("📌 Team Statistical Comparison Table")
+    # -------------------------
+    # Tab 3: Comparison Table
+    # -------------------------
+    with tabs[3]:
+        st.subheader("📌 Team Statistical Comparison Table")
 
-            with st.expander("🆚 Team vs Team Stat Comparison Table", expanded=True):
-                try:
-                    # Merge win/loss data into one DataFrame
-                    df_combined_all = pd.concat([
-                        df_win.rename(columns={'Winning Team': 'Team'}),
-                        df_loss.rename(columns={'Losing Team': 'Team'})
-                    ], ignore_index=True)
+        with st.expander("🆚 Team vs Team Stat Comparison Table", expanded=True):
+            try:
+                # Merge win/loss into one DF with a unified 'Team' column
+                df_combined_all = pd.concat([
+                    df_win_filtered.rename(columns={'Winning Team': 'Team'}),
+                    df_loss_filtered.rename(columns={'Losing Team': 'Team'})
+                ], ignore_index=True)
 
-                    # Keep only numeric columns
-                    numeric_cols = df_combined_all.select_dtypes(include=[np.number]).columns
+                numeric_cols = df_combined_all.select_dtypes(include=[np.number]).columns
 
-                    # Compute average stats per team
-                    team_avg_stats = df_combined_all.groupby('Team')[numeric_cols].mean().dropna(how='all')
-                    teams = sorted(team_avg_stats.index.unique())
+                # Average stats per team
+                team_avg_stats = df_combined_all.groupby('Team')[numeric_cols].mean().dropna(how='all')
+                teams = sorted(team_avg_stats.index.unique())
 
-                    # Team selection
-                    teams = sorted(team_avg_stats.index.unique())
+                team1 = st.selectbox("Select Team 1", teams, key="team1_compare_table")
+                team2 = st.selectbox("Select Team 2", teams, key="team2_compare_table")
 
-                    team1 = st.selectbox("Select Team 1", teams, key="team1_compare_table")
-                    team2 = st.selectbox("Select Team 2", teams, key="team2_compare_table")
+                if team1 not in team_avg_stats.index or team2 not in team_avg_stats.index:
+                    st.warning("One or both selected teams do not have enough data to display a comparison.")
+                    st.stop()
 
-                    if team1 not in team_avg_stats.index or team2 not in team_avg_stats.index:
-                        st.warning("One or both selected teams do not have enough data to display a comparison.")
-                        st.stop()
+                # Rankings (mixed direction)
+                lower_is_better_stats = {
+                    "Goals Conceded",
+                    "Penalties Conceded",
+                    "Missed Shots",
+                    "Shots Blocked",
+                    "SoT Conceded",
+                    "Exclusions Conceded",
+                    "Pass to CF Conceded",
+                    "Pass to CF - Outcome"
+                }
 
-                    # Rankings
-                    # Define stats where lower is better
-                    lower_is_better_stats = {
-                        "Goals Conceded",
-                        "Penalties Conceded",
-                        "Missed Shots",
-                        "Shots Blocked",
-                        "SoT Conceded",
-                        "Exclusions Conceded",
-                        "Pass to CF Conceded",
-                        "Pass to CF - Outcome"
-                    }
+                rankings = pd.DataFrame(index=team_avg_stats.index)
+                for stat in team_avg_stats.columns:
+                    if stat in lower_is_better_stats:
+                        rankings[stat] = team_avg_stats[stat].rank(ascending=True)
+                    else:
+                        rankings[stat] = team_avg_stats[stat].rank(ascending=False)
 
-                    # Create rankings DataFrame with stat-specific ordering
-                    rankings = pd.DataFrame(index=team_avg_stats.index)
+                # Side-by-side table
+                df_compare = pd.DataFrame({
+                    f"{team1} Avg": team_avg_stats.loc[team1],
+                    f"{team1} Rank": rankings.loc[team1],
+                    "Statistic": team_avg_stats.columns,
+                    f"{team2} Avg": team_avg_stats.loc[team2],
+                    f"{team2} Rank": rankings.loc[team2],
+                })
 
-                    for stat in team_avg_stats.columns:
-                        if stat in lower_is_better_stats:
-                            rankings[stat] = team_avg_stats[stat].rank(ascending=True)  # lower is better
-                        else:
-                            rankings[stat] = team_avg_stats[stat].rank(ascending=False)  # higher is better
+                df_compare = df_compare[
+                    [f"{team1} Avg", f"{team1} Rank", "Statistic", f"{team2} Avg", f"{team2} Rank"]
+                ].set_index("Statistic")
 
-                    # Build side-by-side comparison table
-                    df_compare = pd.DataFrame({
-                        f"{team1} Avg": team_avg_stats.loc[team1],
-                        f"{team1} Rank": rankings.loc[team1],
-                        "Statistic": team_avg_stats.columns,
-                        f"{team2} Avg": team_avg_stats.loc[team2],
-                        f"{team2} Rank": rankings.loc[team2],
-                    })
+                # Ordinal helper
+                def ordinal(n):
+                    n = int(n)
+                    return f"{n}{'tsnrhtdd'[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10::4]}"
 
-                    # Reorder columns: [Team1 Avg, Team1 Rank, Statistic, Team2 Avg, Team2 Rank]
-                    df_compare = df_compare[
-                        [f"{team1} Avg", f"{team1} Rank", "Statistic", f"{team2} Avg", f"{team2} Rank"]
-                    ].set_index("Statistic")
+                df_compare[f"{team1} Rank"] = df_compare[f"{team1} Rank"].apply(
+                    lambda x: ordinal(x) if pd.notnull(x) else "")
+                df_compare[f"{team2} Rank"] = df_compare[f"{team2} Rank"].apply(
+                    lambda x: ordinal(x) if pd.notnull(x) else "")
 
-                    # Format ranking columns as integers
-                    def ordinal(n):
-                        n = int(n)
-                        return f"{n}{'tsnrhtdd'[(n // 10 % 10 != 1) * (n % 10 < 4) * n % 10::4]}"
+                # Colour only top 3 and bottom 3
+                def highlight_top_bottom(val):
+                    if isinstance(val, str) and val[:-2].isdigit():
+                        rank = int(val[:-2])
+                        if rank <= 3:
+                            return 'background-color: rgba(102, 194, 165, 0.8); font-weight: bold'  # soft green
+                        elif rank >= 10:
+                            return 'background-color: rgba(252, 141, 98, 0.8); font-weight: bold'  # soft red
+                    return ''
 
-                    df_compare[f"{team1} Rank"] = df_compare[f"{team1} Rank"].apply(
-                        lambda x: ordinal(x) if pd.notnull(x) else "")
-                    df_compare[f"{team2} Rank"] = df_compare[f"{team2} Rank"].apply(
-                        lambda x: ordinal(x) if pd.notnull(x) else "")
+                styled_df = df_compare.style.applymap(
+                    highlight_top_bottom, subset=[f"{team1} Rank", f"{team2} Rank"]
+                ).format(precision=2)
 
-                    # Color only top 3 and bottom 3 ranks
-                    def highlight_top_bottom(val):
-                        if isinstance(val, str) and val[:-2].isdigit():
-                            rank = int(val[:-2])  # remove 'st', 'nd', etc.
-                            if rank <= 3:
-                                return 'background-color: rgba(102, 194, 165, 0.8); font-weight: bold'  # soft green
-                            elif rank >= 10:
-                                return 'background-color: rgba(252, 141, 98, 0.8); font-weight: bold'  # soft red
-                        return ''
+                st.dataframe(styled_df, use_container_width=True)
 
-                    # Apply style to both team rank columns
-                    styled_df = df_compare.style.applymap(highlight_top_bottom,
-                                                          subset=[f"{team1} Rank", f"{team2} Rank"]) \
-                        .format(precision=2)
+            except Exception as e:
+                st.error(f"❌ Error generating comparison table: {e}")
 
-                    st.dataframe(styled_df, use_container_width=True)
-
-                except Exception as e:
-                    st.error(f"❌ Error generating comparison table: {e}")
-
-            # Team Filter
+    # -------------------------
+    # Tab 4: Team Breakdown
+    # -------------------------
+    with tabs[4]:
+        try:
             team_col_win = "Winning Team"
             team_col_loss = "Losing Team"
 
-            team_names = sorted(set(df_win[team_col_win].dropna().unique()) | set(df_loss[team_col_loss].dropna().unique()))
+            team_names = sorted(set(df_win_filtered[team_col_win].dropna().unique()) |
+                                set(df_loss_filtered[team_col_loss].dropna().unique()))
+            if not team_names:
+                st.warning("No teams found after filtering.")
+                st.stop()
+
             selected_team = st.selectbox("🔍 Select a Team for Breakdown", team_names)
 
-            team_win_data = df_win[df_win[team_col_win] == selected_team]
-            team_loss_data = df_loss[df_loss[team_col_loss] == selected_team]
+            team_win_data = df_win_filtered[df_win_filtered[team_col_win] == selected_team]
+            team_loss_data = df_loss_filtered[df_loss_filtered[team_col_loss] == selected_team]
 
             # --- Snapshot Stats ---
             total_matches = len(team_win_data) + len(team_loss_data)
@@ -452,23 +527,19 @@ def main():
             col4.metric("Win %", f"{win_percentage:.1f}%")
 
             if not team_win_data.empty and not team_loss_data.empty:
+                # --- Average Stats Wins vs Losses
                 avg_team_win = team_win_data[num_cols].mean()
                 avg_team_loss = team_loss_data[num_cols].mean()
 
-                team_df = pd.DataFrame({'Wins': avg_team_win, 'Losses': avg_team_loss})
-                team_df = team_df.sort_index()
-
-                import plotly.express as px
+                team_df = pd.DataFrame({'Wins': avg_team_win, 'Losses': avg_team_loss}).sort_index()
 
                 st.subheader(f"📌 {selected_team} - Average Stats in Wins vs Losses")
 
-                # Reset index so 'Statistic' is a column
                 team_df_reset = team_df.reset_index().rename(columns={'index': 'Statistic'})
+                team_df_melted = team_df_reset.melt(
+                    id_vars='Statistic', var_name='Result', value_name='Average Value'
+                )
 
-                # Melt the dataframe so we have one column for win/loss category and one for values
-                team_df_melted = team_df_reset.melt(id_vars='Statistic', var_name='Result', value_name='Average Value')
-
-                # Create interactive Plotly bar chart with soft red/green
                 fig = px.bar(
                     team_df_melted,
                     y='Statistic',
@@ -478,16 +549,13 @@ def main():
                     orientation='h',
                     hover_name='Statistic',
                     hover_data={'Average Value': ':.2f', 'Result': True},
-                    color_discrete_map={
-                        'Wins': '#66c2a5',  # soft green
-                        'Losses': '#fc8d62'  # soft coral/red
-                    },
+                    color_discrete_map={'Wins': '#66c2a5', 'Losses': '#fc8d62'},
                     height=800
                 )
-
                 fig.update_layout(xaxis_title="Average Value", yaxis_title="Statistic")
                 st.plotly_chart(fig, use_container_width=True)
 
+                # --- Boxplots of All Stats
                 st.subheader(f"📌 {selected_team} - Boxplots of All Stats in Wins vs Losses")
                 combined = pd.concat([
                     team_win_data[num_cols].assign(Result='Win'),
@@ -495,59 +563,35 @@ def main():
                 ])
                 melted = pd.melt(combined, id_vars='Result', var_name='Statistic', value_name='Value')
 
-                import plotly.express as px
-
-                fig = px.box(
+                fig2 = px.box(
                     melted,
                     x="Statistic",
                     y="Value",
                     color="Result",
-                    points="all",  # Show individual data points
-                    hover_data={"Value": True, "Statistic": True, "Result": True},
+                    points="all",
                     title=f"{selected_team} - Boxplots of All Stats in Wins vs Losses",
-                    color_discrete_map={
-                        "Win": "green",
-                        "Loss": "red"
-                    }
+                    color_discrete_map={"Win": "green", "Loss": "red"},
+                    height=800
                 )
-
-                fig.update_layout(
+                fig2.update_layout(
                     xaxis_title="Statistic",
                     yaxis_title="Value",
                     boxmode="group",
-                    height=800,  # Increased height from 600 to 800
                     margin=dict(l=40, r=40, t=60, b=60)
                 )
-
-                fig.update_traces(marker=dict(size=5, opacity=0.6))  # Optional: fine-tune point visibility
-
-                st.plotly_chart(fig, use_container_width=True)
-
+                fig2.update_traces(marker=dict(size=5, opacity=0.6))
+                st.plotly_chart(fig2, use_container_width=True)
             else:
                 st.warning(f"No data found for {selected_team} in one or both result categories.")
 
-        except Exception as e:
-            st.error(f"❌ Error loading Excel tables: {e}")
-
-        # --- 🔍 Team Summary Insight ---
-
-        try:
+            # --- AI-style summary (exclude obvious outcome stats)
             st.subheader(f"🧠 Insights: What matters when {selected_team} win or lose")
 
-            # Filter team-specific data for wins and losses
-            team_win_data = df_win[df_win['Winning Team'] == selected_team]
-            team_loss_data = df_loss[df_loss['Losing Team'] == selected_team]
-
-            # Only include numeric stats
             common_stats = list(set(team_win_data.columns) & set(team_loss_data.columns))
             valid_cols = team_win_data[common_stats].select_dtypes(include=[np.number]).columns
-            ignore_cols = [
-                'Days Since Latest', 'Time Weight',
-                'Goals Scored', 'Goals Conceded'  # <- Exclude obvious outcome metrics
-            ]
+            ignore_cols = ['Days Since Latest', 'Time Weight', 'Goals Scored', 'Goals Conceded']
             stat_cols = [col for col in valid_cols if col not in ignore_cols]
 
-            # Compute Cohen's d
             team_cohen_d = {}
             for stat in stat_cols:
                 win_vals = team_win_data[stat].dropna()
@@ -556,25 +600,19 @@ def main():
                     d = cohen_d(win_vals, loss_vals)
                     team_cohen_d[stat] = d
 
-            # Sort by absolute effect size and get top 5
             top_stats = sorted(team_cohen_d.items(), key=lambda x: abs(x[1]), reverse=True)[:5]
 
-            # Build summary strings
-            insights = []
+            st.markdown("### 📋 Summary:")
             for stat, d in top_stats:
                 avg_win = team_win_data[stat].mean()
                 avg_loss = team_loss_data[stat].mean()
                 better_when = "higher" if avg_win > avg_loss else "lower"
                 outcome = "increased" if better_when == "higher" else "reduced"
-                insights.append(
-                    f"- When {selected_team} **win**, they tend to have **{outcome}** `{stat}` compared to when they lose.")
-
-            st.markdown("### 📋 Summary:")
-            for insight in insights:
-                st.markdown(insight)
+                st.markdown(f"- When {selected_team} **win**, they tend to have **{outcome}** `{stat}` compared to when they lose.")
 
         except Exception as e:
-            st.error(f"❌ Error generating win/loss insight summary: {e}")
+            st.error(f"❌ Error in Team Breakdown tab: {e}")
+
 
 if __name__ == "__main__":
     main()
