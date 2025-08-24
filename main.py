@@ -99,7 +99,7 @@ def main():
         st.stop()
 
     # -----------------------------------------
-    # 1) Global filter (applies to ALL tabs)
+    # 1) Global filters (apply to ALL tabs)
     # -----------------------------------------
     with st.container():
         st.markdown("### 🔍 Filter by Competition")
@@ -122,7 +122,24 @@ def main():
             df_win_filtered = df_win.copy()
             df_loss_filtered = df_loss.copy()
 
-    # Common numeric columns used throughout
+        # 🎯 Filter by Match Tier
+        if 'Tier' in df_win.columns and 'Tier' in df_loss.columns:
+            st.markdown("### 🎯 Filter by Match Tier")
+            tier_options = sorted(set(df_win['Tier'].dropna()) | set(df_loss['Tier'].dropna()))
+            selected_tier = st.radio(
+                "Select Tier of Matches",
+                ["All Matches"] + tier_options,
+                index=0,
+                horizontal=True
+            )
+
+            if selected_tier != "All Matches":
+                df_win_filtered = df_win_filtered[df_win_filtered['Tier'] == selected_tier].copy()
+                df_loss_filtered = df_loss_filtered[df_loss_filtered['Tier'] == selected_tier].copy()
+        else:
+            st.warning("⚠️ 'Tier' column not found in one or both sheets. Showing all data.")
+
+    # ✅ Common numeric columns used throughout
     num_cols = df_win_filtered.select_dtypes(include=np.number).columns.intersection(
         df_loss_filtered.select_dtypes(include=np.number).columns
     )
