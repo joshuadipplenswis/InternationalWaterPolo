@@ -476,13 +476,14 @@ def main():
                 df_compare[f"{team2} Rank"] = df_compare[f"{team2} Rank"].apply(
                     lambda x: ordinal(x) if pd.notnull(x) else "")
 
-                # Colour only top 3 and bottom 3
+                # ✅ Dynamic colouring of top 3 and bottom 3 ranks
                 def highlight_top_bottom(val):
                     if isinstance(val, str) and val[:-2].isdigit():
-                        rank = int(val[:-2])
+                        rank = int(val[:-2])  # remove 'st', 'nd', 'rd', 'th'
+                        total_teams = len(team_avg_stats)  # number of teams in dataset
                         if rank <= 3:
                             return 'background-color: rgba(102, 194, 165, 0.8); font-weight: bold'  # soft green
-                        elif rank >= 10:
+                        elif rank > total_teams - 3:
                             return 'background-color: rgba(252, 141, 98, 0.8); font-weight: bold'  # soft red
                     return ''
 
