@@ -125,6 +125,16 @@ def main():
         # 🪜 Filter by Match Tier
         if 'Tier' in df_win.columns and 'Tier' in df_loss.columns:
             st.markdown("### 🎯 Filter by Match Tier")
+
+            # Explanation block
+            st.markdown("""
+                    **ℹ️ Tiering System Explained**  
+                    - **Tier 1 Matches** are when the **Top 7 teams** play each other  
+                    - **Tier 2 Matches** are when one of the Top 7 teams plays a team outside the Top 7, or when 2 teams outside the Top 7 play each other  
+                    - **Tier 1 Teams**: AUS, ESP, GRE, HUN, ITA, NED, USA  
+                    - **Tier 2 Teams**: All other teams  
+                    """)
+
             tier_options = sorted(set(df_win['Tier'].dropna()) | set(df_loss['Tier'].dropna()))
             selected_tier = st.radio(
                 "Select Tier of Matches",
@@ -258,6 +268,7 @@ def main():
         - **Win Rate** (50% weight)
         - **Average Goal Margin**: Goals Scored minus Goals Conceded (20% weight)
         - **Key Match Statistics**: Weighted by Cohen’s d values, showing which stats most distinguish wins from losses (30% weight)
+        - **Tier Weighting**: Tier 1 matches (Top 7 vs Top 7) hold stronger weighting than Tier 2 matches
         """)
 
         with st.expander("🔝 Team Rankings by Performance Index", expanded=True):
@@ -277,6 +288,11 @@ def main():
                 df_combined['Days Since Latest'] = (latest_date - df_combined['Date']).dt.days
                 decay_rate = 0.005  # tune if needed
                 df_combined['Time Weight'] = np.exp(-decay_rate * df_combined['Days Since Latest'])
+
+                # --- 🔥 Tier Weighting ---
+                if 'Tier' in df_combined.columns:
+                    tier_weights = df_combined['Tier'].map({'Tier 1': 2.0, 'Tier 2': 1.0}).fillna(1.0)
+                    df_combined['Time Weight'] *= tier_weights
 
                 # ✅ Step 1: Cohen's d (reuse if available)
                 if "cohen_d_df" in st.session_state and not st.session_state["cohen_d_df"].empty:
@@ -309,7 +325,7 @@ def main():
                 for team in all_teams:
                     team_games = df_combined[
                         (df_combined['Winning Team'] == team) | (df_combined['Losing Team'] == team)
-                    ].copy()
+                        ].copy()
                     if team_games.empty:
                         continue
 
@@ -332,7 +348,7 @@ def main():
                     if relevant_stats:
                         team_stat_df = team_games.copy()
                         team_stat_df['Is Team'] = (
-                            (team_stat_df['Winning Team'] == team) | (team_stat_df['Losing Team'] == team)
+                                (team_stat_df['Winning Team'] == team) | (team_stat_df['Losing Team'] == team)
                         )
                         team_stat_df = team_stat_df[team_stat_df['Is Team']]
                         avail_stats = [s for s in relevant_stats if s in team_stat_df.columns]
@@ -388,14 +404,13 @@ def main():
                     df_perf['Stat Score'] = 0.0
 
                 # ✅ Step 4: Final Performance Index
-                # Safe divisors
                 gm_div = df_perf['Goal Margin'].abs().max()
                 ss_div = df_perf['Stat Score'].max()
 
                 df_perf['Performance Index'] = (
-                    df_perf['Win Rate'] * 0.5 +
-                    ((df_perf['Goal Margin'] / gm_div) if gm_div and gm_div != 0 else 0) * 0.2 +
-                    ((df_perf['Stat Score'] / ss_div) if ss_div and ss_div != 0 else 0) * 0.3
+                        df_perf['Win Rate'] * 0.5 +
+                        ((df_perf['Goal Margin'] / gm_div) if gm_div and gm_div != 0 else 0) * 0.2 +
+                        ((df_perf['Stat Score'] / ss_div) if ss_div and ss_div != 0 else 0) * 0.3
                 )
 
                 # ✅ Step 5: Plotly Chart
@@ -407,7 +422,7 @@ def main():
                     y="Team",
                     orientation='h',
                     text="Performance Index",
-                    title="🔝 Team Performance Index Ranking (Time-Weighted)",
+                    title="🔝 Team Performance Index Ranking (Time & Tier Weighted)",
                     color="Performance Index",
                     color_continuous_scale="Blues",
                     height=600
