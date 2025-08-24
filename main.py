@@ -122,7 +122,7 @@ def main():
             df_win_filtered = df_win.copy()
             df_loss_filtered = df_loss.copy()
 
-        # 🎯 Filter by Match Tier
+        # 🪜 Filter by Match Tier
         if 'Tier' in df_win.columns and 'Tier' in df_loss.columns:
             st.markdown("### 🎯 Filter by Match Tier")
             tier_options = sorted(set(df_win['Tier'].dropna()) | set(df_loss['Tier'].dropna()))
