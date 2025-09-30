@@ -14,8 +14,6 @@ import seaborn as sns
 from scipy.stats import ttest_ind
 import openpyxl
 from pathlib import Path
-
-# Optional: import plotly globally (you also import inline later if you prefer)
 import plotly.express as px
 
 st.set_page_config(layout="wide")
@@ -162,7 +160,8 @@ def main():
         "📊 Statistically Significant Differences",
         "📈 Performance Index",
         "🆚 Comparison Table",
-        "🔍 Team Breakdown"
+        "🔍 Team Breakdown",
+        "🔮 Predictive Insights"
     ])
 
     # -------------------------
@@ -213,16 +212,16 @@ def main():
             d_df = pd.DataFrame.from_dict(d_values, orient='index', columns=['Cohen_d']) \
                                .sort_values('Cohen_d', key=np.abs)
 
-            st.subheader("📌 Cohen's d of Global Differences")
+            st.subheader("📌 Differences Between Winning and Losing")
 
             # ➕ Coach-friendly explanation
             st.markdown("""
-            **ℹ️ What is Cohen’s d?**  
+            **ℹ️ How to read this chart?**  
             Cohen’s d measures **how strongly a stat differs** between wins and losses.
             - **0.2 ≈ small difference**  
             - **0.5 ≈ moderate difference**  
             - **0.8+ ≈ large difference**  
-            The larger the absolute value, the more that statistic separates wins from losses.
+            Which numbers change the most when a team wins and loses.
             """)
 
             # Bar plot with seaborn / matplotlib
@@ -646,6 +645,141 @@ def main():
         except Exception as e:
             st.error(f"❌ Error in Team Breakdown tab: {e}")
 
+    # -------------------------
+    # Tab 5: Predictive Insights
+    # -------------------------
+    with tabs[5]:
+        st.subheader("🔮 Predictive Insights")
+
+        st.markdown("""
+        **ℹ️ What this tab shows:**  
+        - Correlation with Winning -> Which match statistics are most strongly linked to winning and losing.  
+        - Logistic Regression -> Identifies which statistics most impact win probability.  
+        - "What-If Simulation -> Sliders so you can test how changes in certain stats affect win probability.  
+        """)
+
+        try:
+            # ✅ Prepare combined dataset
+            df_win_f = df_win_filtered.copy()
+            df_loss_f = df_loss_filtered.copy()
+            df_win_f["Result"] = "Win"
+            df_loss_f["Result"] = "Lose"
+            df_combined = pd.concat([df_win_f, df_loss_f], ignore_index=True)
+
+            # Add binary outcome for regression
+            df_combined["WinBinary"] = (df_combined["Result"] == "Win").astype(int)
+
+            # --- 1) Correlation with Winning (Bar Chart) ---
+            st.markdown("### 📊 Correlation with Winning")
+
+            correlations = {}
+            for stat in num_cols:
+                if stat in df_combined.columns:
+                    try:
+                        correlations[stat] = df_combined[stat].corr(df_combined["WinBinary"])
+                    except Exception:
+                        continue
+
+            if correlations:
+                corr_df = (
+                    pd.DataFrame.from_dict(correlations, orient="index", columns=["Correlation"])
+                    .dropna()
+                    .sort_values("Correlation", ascending=True)
+                )
+
+                fig = px.bar(
+                    corr_df,
+                    x="Correlation",
+                    y=corr_df.index,
+                    orientation="h",
+                    title="How Each Stat Relates to Winning",
+                    color="Correlation",
+                    color_continuous_scale="RdBu",
+                    range_color=[-1, 1]
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+                st.markdown("""
+                **ℹ️ How to read this chart:**  
+                - Positive values (bars to the right) → Stat increases chances of winning.  
+                - Negative values (bars to the left) → Stat decreases chances of winning.  
+                - The further from 0, the stronger the relationship.
+                - This chart shows how strongly each statistic is associated with winning and losing.
+                """)
+            else:
+                st.warning("⚠️ No valid numeric stats available for correlation analysis.")
+
+            # --- 2) Logistic Regression ---
+            st.markdown("### 📈 Logistic Regression (Predicting Probability of Win)")
+            from sklearn.linear_model import LogisticRegression
+            from sklearn.preprocessing import StandardScaler
+
+            if not num_cols.empty:
+                X = df_combined[num_cols].fillna(0)
+                y = df_combined["WinBinary"]
+
+                # Scale numeric features
+                scaler = StandardScaler()
+                X_scaled = scaler.fit_transform(X)
+
+                model = LogisticRegression(max_iter=500)
+                model.fit(X_scaled, y)
+
+                coefs = pd.DataFrame({
+                    "Statistic": num_cols,
+                    "Coefficient": model.coef_[0]
+                }).sort_values("Coefficient", key=abs, ascending=False)
+
+                st.write("Top influencing stats:")
+
+                st.markdown("""
+                **ℹ️ How to read this table:**  
+                - This shows which stats have the greatest impact on winning whilst taking other statistics into account.
+                - Which statistics matter the most when predicting a win?  
+                """)
+
+                st.dataframe(coefs.head(10))
+
+                # --- 3) What-If Simulation ---
+                st.markdown("### 🔮 What-if Simulation")
+                st.write("Adjust a key statistic and see how win probability changes:")
+
+                # Use mean values as baseline
+                team_avg = X.mean(axis=0).values
+                baseline_prob = model.predict_proba([scaler.transform([team_avg])[0]])[0, 1]
+
+                st.write(f"Baseline predicted win probability: **{baseline_prob:.1%}**")
+
+                # Expanded list of adjustable stats
+                sim_stats = ["SoT", "Turnovers", "Exclusions Conceded", "6v6 Goals", "6v5 Goals", "GK Save",
+                             "Shots Blocked"]
+                sim_inputs = {}
+
+                for stat in sim_stats:
+                    if stat in num_cols:
+                        current_val = float(df_combined[stat].mean())
+                        sim_inputs[stat] = st.slider(
+                            f"Adjust {stat}",
+                            min_value=float(df_combined[stat].min()),
+                            max_value=float(df_combined[stat].max()),
+                            value=current_val,
+                            step=1.0
+                        )
+
+                # Apply simulation
+                scenario = team_avg.copy()
+                for stat, new_val in sim_inputs.items():
+                    idx = list(num_cols).index(stat)
+                    scenario[idx] = new_val
+
+                win_prob_scenario = model.predict_proba([scaler.transform([scenario])[0]])[0, 1]
+                st.success(f"Predicted win probability with adjustments: **{win_prob_scenario:.1%}**")
+
+            else:
+                st.warning("⚠️ No numeric columns found for regression or simulation.")
+
+        except Exception as e:
+            st.error(f"❌ Error generating predictive insights: {e}")
 
 if __name__ == "__main__":
     main()
