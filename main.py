@@ -700,7 +700,7 @@ def main():
                 st.plotly_chart(fig, use_container_width=True)
 
                 st.markdown("""
-                **ℹ️ How to read this chart:**  
+                **ℹ️ How to read this chart test:**  
                 - Positive values (bars to the right) → Stat increases chances of winning.  
                 - Negative values (bars to the left) → Stat decreases chances of winning.  
                 - The further from 0, the stronger the relationship.
@@ -733,7 +733,7 @@ def main():
                 st.write("Top influencing stats:")
 
                 st.markdown("""
-                **ℹ️ How to read this table:**  
+                **ℹ️ How to read this table testing:**  
                 - This shows which stats have the greatest impact on winning whilst taking other statistics into account.
                 - Which statistics matter the most when predicting a win?  
                 """)
