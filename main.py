@@ -734,7 +734,7 @@ def main():
 
                 st.markdown("""
                 **ℹ️ How to read this table:**  
-                - This table shows which stats have the greatest impact on winning whilst taking other statistics into account.
+                - This shows which stats have the greatest impact on winning whilst taking other statistics into account.
                 - Which statistics matter the most when predicting a win?  
                 """)
 
