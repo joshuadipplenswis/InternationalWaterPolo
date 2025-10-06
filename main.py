@@ -700,7 +700,7 @@ def main():
                 st.plotly_chart(fig, use_container_width=True)
 
                 st.markdown("""
-                **ℹ️ How to read this chart test:**  
+                **ℹ️ How to read this chart:**  
                 - Positive values (bars to the right) → Stat increases chances of winning.  
                 - Negative values (bars to the left) → Stat decreases chances of winning.  
                 - The further from 0, the stronger the relationship.
