@@ -733,9 +733,9 @@ def main():
                 st.write("Top influencing stats:")
 
                 st.markdown("""
-                **ℹ️ How to read this table testing: testing**  
+                **ℹ️ How to read this table testing:**  
                 - This shows which stats have the greatest impact on winning whilst taking other statistics into account.
-                - Which statistics matter the most when predicting a win?  
+                - Which statistics matter the most wsdfdhen predicting a win?  
                 """)
 
                 st.dataframe(coefs.head(10))
