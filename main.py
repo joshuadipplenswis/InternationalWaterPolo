@@ -710,7 +710,7 @@ def main():
                 st.warning("⚠️ No valid numeric stats available for correlation analysis.")
 
             # --- 2) Logistic Regression ---
-            st.markdown("### 📈 Logistic Regression (Predicting Probability of Win)")
+            st.markdown("### 📈 Logistic Regression")
             from sklearn.linear_model import LogisticRegression
             from sklearn.preprocessing import StandardScaler
 
@@ -738,7 +738,10 @@ def main():
                 - Which statistics matter the most predicting a win?  
                 """)
 
-                st.dataframe(coefs.head(10))
+                st.dataframe(
+                    coefs.head(10),
+                    use_container_width=False,
+                )
 
                 # --- 3) What-If Simulation ---
                 st.markdown("### 🔮 What-if Simulation")
@@ -752,7 +755,7 @@ def main():
 
                 # Expanded list of adjustable stats
                 sim_stats = ["SoT", "Turnovers", "Exclusions Conceded", "6v6 Goals", "6v5 Goals", "GK Save",
-                             "Shots Blocked"]
+                             "Blocks"]
                 sim_inputs = {}
 
                 for stat in sim_stats:
