@@ -157,7 +157,7 @@ def main():
     # -----------------------------------------
     tabs = st.tabs([
         "🏠 Home",
-        "📊 Statistically Significant Differences",
+        "📊 Winning and Losing Differences",
         "📈 Performance Index",
         "🆚 Comparison Table",
         "🔍 Team Breakdown",
@@ -212,16 +212,16 @@ def main():
             d_df = pd.DataFrame.from_dict(d_values, orient='index', columns=['Cohen_d']) \
                                .sort_values('Cohen_d', key=np.abs)
 
-            st.subheader("📌 Differences Between Winning and Losing")
+            st.subheader("📌 Winning and Losing Differences")
 
             # ➕ Coach-friendly explanation
             st.markdown("""
             **ℹ️ How to read this chart?**  
             Cohen’s d measures **how strongly a stat differs** between wins and losses.
+            Which numbers change the most between wins and losses.
             - **0.2 ≈ small difference**  
             - **0.5 ≈ moderate difference**  
             - **0.8+ ≈ large difference**  
-            Which numbers change the most when a team wins and loses.
             """)
 
             # Bar plot with seaborn / matplotlib
@@ -744,23 +744,42 @@ def main():
                 )
 
                 # --- 3) What-If Simulation ---
+                # --- 3) What-If Simulation ---
                 st.markdown("### 🔮 What-if Simulation")
-                st.write("Adjust a key statistic and see how win probability changes:")
+                st.markdown("""
+                **ℹ️ How to use this:**  
+                Select a team and adjust stats to see how changes could affect their chance of winning.
+                """)
 
-                # Use mean values as baseline
-                team_avg = X.mean(axis=0).values
+                # Select team for baseline
+                teams = sorted(set(df_win_f['Winning Team'].dropna()) | set(df_loss_f['Losing Team'].dropna()))
+                selected_team = st.selectbox("Select Team", teams)
+
+                # Filter data for that team
+                team_rows = df_combined[
+                    (df_combined["Winning Team"] == selected_team)
+                    | (df_combined["Losing Team"] == selected_team)
+                    ]
+
+                if team_rows.empty:
+                    st.warning(f"No data found for {selected_team}. Using overall averages.")
+                    team_avg = X.mean(axis=0).values
+                else:
+                    team_avg = team_rows[num_cols].mean().fillna(0).values
+
+                # Baseline probability
                 baseline_prob = model.predict_proba([scaler.transform([team_avg])[0]])[0, 1]
-
-                st.write(f"Baseline predicted win probability: **{baseline_prob:.1%}**")
+                st.write(f"Baseline predicted win probability for **{selected_team}**: **{baseline_prob:.1%}**")
 
                 # Expanded list of adjustable stats
-                sim_stats = ["SoT", "Turnovers", "Exclusions Conceded", "6v6 Goals", "6v5 Goals", "GK Save",
-                             "Blocks"]
+                sim_stats = ["SoT", "Turnovers", "Exclusions Conceded",
+                             "6v6 Goals", "6v5 Goals", "GK Save", "Blocks"]
                 sim_inputs = {}
 
                 for stat in sim_stats:
                     if stat in num_cols:
-                        current_val = float(df_combined[stat].mean())
+                        current_val = float(team_rows[stat].mean()) if not team_rows.empty else float(
+                            df_combined[stat].mean())
                         sim_inputs[stat] = st.slider(
                             f"Adjust {stat}",
                             min_value=float(df_combined[stat].min()),
@@ -775,8 +794,11 @@ def main():
                     idx = list(num_cols).index(stat)
                     scenario[idx] = new_val
 
+                # Predicted probability with adjustments
                 win_prob_scenario = model.predict_proba([scaler.transform([scenario])[0]])[0, 1]
-                st.success(f"Predicted win probability with adjustments: **{win_prob_scenario:.1%}**")
+
+                st.success(
+                    f"Predicted win probability for **{selected_team}** after adjustments: **{win_prob_scenario:.1%}**")
 
             else:
                 st.warning("⚠️ No numeric columns found for regression or simulation.")
