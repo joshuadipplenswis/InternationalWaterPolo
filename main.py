@@ -687,25 +687,39 @@ def main():
                     .sort_values("Correlation", ascending=True)
                 )
 
+                # ✅ Only show top 5 negative and top 5 positive correlations
+                top_neg = corr_df.head(5)
+                top_pos = corr_df.tail(5)
+                corr_subset = pd.concat([top_neg, top_pos])
+
                 fig = px.bar(
-                    corr_df,
+                    corr_subset,
                     x="Correlation",
-                    y=corr_df.index,
+                    y=corr_subset.index,
                     orientation="h",
-                    title="How Each Stat Relates to Winning",
+                    title="Top Statistics Correlated with Winning",
                     color="Correlation",
                     color_continuous_scale="RdBu",
                     range_color=[-1, 1]
                 )
+
+                fig.update_layout(
+                    height=500,
+                    xaxis_title="Correlation with Winning",
+                    yaxis_title="Statistic",
+                    yaxis=dict(tickfont=dict(size=12))
+                )
+
                 st.plotly_chart(fig, use_container_width=True)
 
                 st.markdown("""
-                **ℹ️ How to read this chart test:**  
-                - Positive values (bars to the right) → Stat increases chances of winning.  
-                - Negative values (bars to the left) → Stat decreases chances of winning.  
-                - The further from 0, the stronger the relationship.
-                - This chart shows how strongly each statistic is associated with winning and losing.
+                **ℹ️ How to read this chart:**  
+                - Bars to the **right** (positive values) → Stat increases chances of winning.  
+                - Bars to the **left** (negative values) → Stat decreases chances of winning.  
+                - The further from 0, the stronger the relationship.  
+                - Only the **Top 5 Positive** and **Top 5 Negative** correlations are shown for clarity.
                 """)
+
             else:
                 st.warning("⚠️ No valid numeric stats available for correlation analysis.")
 
