@@ -798,13 +798,12 @@ def main():
                     use_container_width=False,
                 )
 
-                # --- 3) Team-Specific Dynamic What-If Simulation ---
+                # --- 3) What-If Simulation ---
                 st.markdown("### 🔮 What-if Simulation")
                 st.markdown("""
-                                **ℹ️ How to use this:**  
-                                Select a team and adjust any statistic to see how changes could affect their chance of winning.  
-                                You can add up to five stats at once and adjust each individually.
-                                """)
+                            **ℹ️ How to use this:**  
+                            Select a team and adjust up to six match statistics to see how changes could affect their chance of winning.
+                            """)
 
                 # Select team for baseline
                 teams = sorted(set(df_win_f['Winning Team'].dropna()) | set(df_loss_f['Losing Team'].dropna()))
@@ -816,6 +815,7 @@ def main():
                     | (df_combined["Losing Team"] == selected_team)
                     ]
 
+                # Handle missing team data
                 if team_rows.empty:
                     st.warning(f"No data found for {selected_team}. Using overall averages.")
                     team_avg = X.mean(axis=0).values
@@ -826,44 +826,37 @@ def main():
                 baseline_prob = model.predict_proba([scaler.transform([team_avg])[0]])[0, 1]
                 st.write(f"Baseline predicted win probability for **{selected_team}**: **{baseline_prob:.1%}**")
 
-                # Let user choose how many variables to simulate
-                num_sliders = st.slider("How many stats would you like to adjust?", 1, 5, 3)
+                # ✅ Choose number of stats to adjust (dropdown instead of slider)
+                num_adjust = st.selectbox(
+                    "How many stats would you like to adjust?",
+                    options=[3, 4, 5, 6],
+                    index=2  # default to 5
+                )
 
-                # Dynamic dropdowns + sliders
+                # Create interactive stat selectors and sliders
                 sim_inputs = {}
-                selected_stats = []
-
-                for i in range(num_sliders):
-                    col1, col2 = st.columns([1, 2])
+                for i in range(num_adjust):
+                    st.markdown(f"**Adjustment {i + 1}:**")
+                    col1, col2 = st.columns([1.5, 3])
 
                     with col1:
-                        stat_choice = st.selectbox(
-                            f"Select statistic #{i + 1}",
-                            options=sorted(num_cols),
-                            index=i if i < len(num_cols) else 0,
-                            key=f"stat_select_{i}_{selected_team}"
+                        stat = st.selectbox(
+                            f"Select Stat #{i + 1}",
+                            options=num_cols,
+                            key=f"stat_{i}"
                         )
 
-                    if stat_choice:
-                        selected_stats.append(stat_choice)
-
-                        if not team_rows.empty:
-                            stat_mean = float(team_rows[stat_choice].mean())
-                            stat_min = float(team_rows[stat_choice].min())
-                            stat_max = float(team_rows[stat_choice].max())
-                        else:
-                            stat_mean = float(df_combined[stat_choice].mean())
-                            stat_min = float(df_combined[stat_choice].min())
-                            stat_max = float(df_combined[stat_choice].max())
-
-                        with col2:
-                            sim_inputs[stat_choice] = st.slider(
-                                f"Adjust {stat_choice}",
-                                min_value=stat_min,
-                                max_value=stat_max,
-                                value=stat_mean,
+                    with col2:
+                        if stat in num_cols:
+                            current_val = float(team_rows[stat].mean()) if not team_rows.empty else float(
+                                df_combined[stat].mean())
+                            sim_inputs[stat] = st.slider(
+                                f"Adjust {stat}",
+                                min_value=float(df_combined[stat].min()),
+                                max_value=float(df_combined[stat].max()),
+                                value=current_val,
                                 step=1.0,
-                                key=f"slider_{i}_{selected_team}"
+                                key=f"slider_{i}"
                             )
 
                 # Apply simulation
@@ -875,19 +868,9 @@ def main():
                 # Predicted probability with adjustments
                 win_prob_scenario = model.predict_proba([scaler.transform([scenario])[0]])[0, 1]
 
-                # Display result
-                delta = win_prob_scenario - baseline_prob
-                arrow = "⬆️" if delta > 0 else "⬇️" if delta < 0 else "➡️"
                 st.success(
-                    f"Predicted win probability for **{selected_team}** after adjustments: "
-                    f"**{win_prob_scenario:.1%}** ({arrow} {delta:+.1%} change)"
+                    f"Predicted win probability for **{selected_team}** after adjustments: **{win_prob_scenario:.1%}**"
                 )
-
-                st.markdown("""
-                                **💡 Tip:**  
-                                Try adjusting key stats like *SoT*, *Exclusions Conceded*, or *GK Save* to see which ones most impact your team’s win probability.  
-                                Each team’s modelled sensitivity is unique — some rely on shooting efficiency, others on defensive control.
-                                """)
 
             else:
                 st.warning("⚠️ No numeric columns found for regression or simulation.")
