@@ -152,6 +152,47 @@ def main():
         df_loss_filtered.select_dtypes(include=np.number).columns
     )
 
+    # 📅 Filter by Date Range (Timeframe)
+    if 'Date' in df_win.columns and 'Date' in df_loss.columns:
+        st.markdown("### 🗓️ Filter by Timeframe")
+
+        # Convert date columns to datetime if not already
+        df_win['Date'] = pd.to_datetime(df_win['Date'], errors='coerce')
+        df_loss['Date'] = pd.to_datetime(df_loss['Date'], errors='coerce')
+
+        # Determine global date range
+        min_date = pd.concat([df_win['Date'], df_loss['Date']]).min()
+        max_date = pd.Timestamp.today()
+
+        # Default = full dataset range
+        default_start = min_date
+        default_end = max_date
+
+        # Two-column layout for clarity
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("📆 From", value=default_start, min_value=min_date, max_value=max_date)
+        with col2:
+            end_date = st.date_input("📅 To", value=default_end, min_value=min_date, max_value=max_date)
+
+        # Apply filter
+        df_win_filtered = df_win_filtered[
+            (df_win_filtered['Date'] >= pd.Timestamp(start_date)) &
+            (df_win_filtered['Date'] <= pd.Timestamp(end_date))
+            ].copy()
+
+        df_loss_filtered = df_loss_filtered[
+            (df_loss_filtered['Date'] >= pd.Timestamp(start_date)) &
+            (df_loss_filtered['Date'] <= pd.Timestamp(end_date))
+            ].copy()
+
+        # Optional summary below
+        st.info(
+            f"Filtering data between **{start_date.strftime('%d %b %Y')}** and **{end_date.strftime('%d %b %Y')}**.")
+
+    else:
+        st.warning("⚠️ 'Date' column not found in one or both sheets. Showing all data.")
+
     # -----------------------------------------
     # 2) Tabs
     # -----------------------------------------
