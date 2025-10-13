@@ -830,7 +830,7 @@ def main():
                 num_adjust = st.selectbox(
                     "How many stats would you like to adjust?",
                     options=[3, 4, 5, 6],
-                    index=2  # default to 5
+                    index=2
                 )
 
                 # Create interactive stat selectors and sliders
@@ -871,6 +871,116 @@ def main():
                 st.success(
                     f"Predicted win probability for **{selected_team}** after adjustments: **{win_prob_scenario:.1%}**"
                 )
+
+                # --- 🧠 AI Insights Summary (robust, model-driven) ---
+                st.subheader("🧠 AI Insights Summary")
+
+                try:
+                    # Build coefficient frame (fallback to coef magnitudes if available)
+                    coef_df = pd.DataFrame({
+                        "Statistic": list(num_cols),
+                        "Coefficient": model.coef_[0] if hasattr(model, "coef_") else np.zeros(len(num_cols))
+                    })
+
+                    # Get team mean values and stat list
+                    stat_list = list(num_cols)
+                    team_mean_series = pd.Series(team_avg, index=stat_list)
+
+                    # Select top 5 most influential stats by coefficient magnitude
+                    top_influencers = (
+                        coef_df.reindex(coef_df["Coefficient"].abs().sort_values(ascending=False).index)
+                        .head(5)
+                        .reset_index(drop=True)
+                    )
+
+                    st.markdown("### 📋 Key Factors Affecting Win Probability:")
+                    st.markdown("""
+                                    These insights test how small increases or decreases in key stats would actually change
+                                    the team's win probability using the logistic regression model.
+                                    """)
+
+                    for _, row in top_influencers.iterrows():
+                        stat = row["Statistic"]
+
+                        # Determine a realistic change amount (delta)
+                        if stat in df_combined.columns:
+                            std_val = float(df_combined[stat].std(skipna=True))
+                        else:
+                            std_val = 0.0
+                        delta = max(1.0, round(std_val, 1)) if std_val > 0 else 1.0
+
+                        # Build two scenarios: +delta and -delta
+                        scenario_inc = team_avg.copy()
+                        scenario_dec = team_avg.copy()
+                        idx = stat_list.index(stat)
+                        scenario_inc[idx] += delta
+                        scenario_dec[idx] -= delta
+
+                        # Predict probabilities for each scenario
+                        try:
+                            prob_inc = model.predict_proba([scaler.transform([scenario_inc])[0]])[0, 1]
+                            prob_dec = model.predict_proba([scaler.transform([scenario_dec])[0]])[0, 1]
+                        except Exception:
+                            continue
+
+                        # Compare both directions against baseline
+                        if prob_inc > baseline_prob or prob_dec > baseline_prob:
+                            if prob_inc >= prob_dec:
+                                best_action = "increase"
+                                new_prob = prob_inc
+                                change = prob_inc - baseline_prob
+                                change_val = delta
+                            else:
+                                best_action = "decrease"
+                                new_prob = prob_dec
+                                change = prob_dec - baseline_prob
+                                change_val = delta
+
+                            trend = "↑" if change > 0 else "↓"
+                            st.markdown(
+                                f"- If **{selected_team}** {best_action}s their **{stat}** by **{change_val}**, "
+                                f"predicted win probability changes from **{baseline_prob:.1%} → {new_prob:.1%}** "
+                                f"({trend} {abs(change) * 100:.1f}%)."
+                            )
+                        else:
+                            st.markdown(
+                                f"- **{stat}** — Adjusting this stat by ±{delta} has minimal short-term effect on win probability."
+                            )
+
+                    # Identify single biggest lever
+                    best_candidate = None
+                    best_increase = 0.0
+                    for _, row in top_influencers.iterrows():
+                        stat = row["Statistic"]
+                        idx = stat_list.index(stat)
+                        delta = 1.0
+                        scenario_inc = team_avg.copy()
+                        scenario_dec = team_avg.copy()
+                        scenario_inc[idx] += delta
+                        scenario_dec[idx] -= delta
+
+                        try:
+                            prob_inc = model.predict_proba([scaler.transform([scenario_inc])[0]])[0, 1]
+                            prob_dec = model.predict_proba([scaler.transform([scenario_dec])[0]])[0, 1]
+                        except Exception:
+                            continue
+
+                        best_local = max(prob_inc, prob_dec)
+                        increase = best_local - baseline_prob
+                        if increase > best_increase:
+                            best_increase = increase
+                            best_candidate = (stat, increase, baseline_prob, best_local)
+
+                    if best_candidate is not None and best_increase > 0:
+                        stat, increase, base, newp = best_candidate
+                        st.info(
+                            f"📌 Biggest lever: changing **{stat}** slightly could raise "
+                            f"**{selected_team}**’s win probability by **{increase * 100:.1f}%** "
+                            f"(from {base:.1%} → {newp:.1%})."
+                        )
+
+                except Exception as e:
+                    st.error(f"⚠️ Could not generate AI insights: {e}")
 
             else:
                 st.warning("⚠️ No numeric columns found for regression or simulation.")
