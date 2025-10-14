@@ -1011,7 +1011,6 @@ def main():
                 else:
                     # Create a combined referee list
                     referees = sorted(set(df_ref['Referee 1'].dropna()) | set(df_ref['Referee 2'].dropna()))
-
                     selected_ref = st.selectbox("Select Referee", referees)
 
                     # Filter matches where this referee appears
@@ -1072,9 +1071,12 @@ def main():
                             "Pass to CF - Outcome"
                         ]
                         cf_data = {}
+                        global_cf_data = {}
+
                         for col in cf_cols:
                             if col in ref_matches.columns:
                                 cf_data[col] = ref_matches[col].fillna(0).mean()
+                                global_cf_data[col] = df_ref[col].fillna(0).mean()
 
                         if cf_data:
                             cf_df = pd.DataFrame({
@@ -1105,6 +1107,15 @@ def main():
                                 margin=dict(l=120, r=20, t=40, b=40)
                             )
                             st.plotly_chart(fig, use_container_width=True)
+
+                            # ✅ Add global averages underneath chart for context
+                            st.markdown("#### ⚖️ Contextual Averages (All Matches)")
+                            global_cf_text = ""
+                            for col, val in global_cf_data.items():
+                                short_label = col.replace("Pass to CF ", "")
+                                global_cf_text += f"- **{short_label}:** {val:.2f} per match  \n"
+                            st.markdown(global_cf_text)
+
                         else:
                             st.info(f"No 'Pass to CF' data available for {selected_ref}.")
 
