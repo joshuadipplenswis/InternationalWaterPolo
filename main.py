@@ -202,7 +202,8 @@ def main():
         "📈 Performance Index",
         "🆚 Comparison Table",
         "🔍 Team Breakdown",
-        "🔮 Predictive Insights"
+        "🔮 Predictive Insights",
+        "⚖️ Referee Analysis"
     ])
 
     # -------------------------
@@ -987,6 +988,128 @@ def main():
 
         except Exception as e:
             st.error(f"❌ Error generating predictive insights: {e}")
+
+        # -------------------------
+        # Tab 6: Referee Analysis
+        # -------------------------
+        with tabs[6]:
+            st.subheader("⚖️ Referee Analysis")
+
+            st.markdown("""
+            **ℹ️ What this shows:**  
+            This section analyses match trends based on referees, highlighting how the flow of a game  
+            (goals, penalties, exclusions, and centre-forward outcomes) varies depending on who officiated.
+            """)
+
+            try:
+                # ✅ Use ONLY Winning Teams sheet to avoid duplicate matches
+                df_ref = df_win_filtered.copy()
+
+                # Ensure referee columns exist
+                if 'Referee 1' not in df_ref.columns or 'Referee 2' not in df_ref.columns:
+                    st.warning("⚠️ Referee columns not found in the dataset.")
+                else:
+                    # Create a combined referee list
+                    referees = sorted(set(df_ref['Referee 1'].dropna()) | set(df_ref['Referee 2'].dropna()))
+
+                    selected_ref = st.selectbox("Select Referee", referees)
+
+                    # Filter matches where this referee appears
+                    ref_matches = df_ref[
+                        (df_ref['Referee 1'] == selected_ref) | (df_ref['Referee 2'] == selected_ref)
+                        ].copy()
+
+                    if ref_matches.empty:
+                        st.warning(f"No matches found for {selected_ref}.")
+                    else:
+                        # ✅ Compute total stats per match
+                        ref_matches["Total Goals"] = (
+                                ref_matches["Goals Scored"].fillna(0) + ref_matches["Goals Conceded"].fillna(0)
+                        )
+                        ref_matches["Total Penalties"] = (
+                                ref_matches["Penalties Awarded"].fillna(0) + ref_matches["Penalties Conceded"].fillna(0)
+                        )
+                        ref_matches["Total Exclusions"] = (
+                                ref_matches["Exclusions Won"].fillna(0) + ref_matches["Exclusions Conceded"].fillna(0)
+                        )
+
+                        # Dataset-wide averages for context
+                        global_avg_goals = (
+                                df_ref["Goals Scored"].fillna(0) + df_ref["Goals Conceded"].fillna(0)
+                        ).mean()
+                        global_avg_penalties = (
+                                df_ref["Penalties Awarded"].fillna(0) + df_ref["Penalties Conceded"].fillna(0)
+                        ).mean()
+                        global_avg_exclusions = (
+                                df_ref["Exclusions Won"].fillna(0) + df_ref["Exclusions Conceded"].fillna(0)
+                        ).mean()
+
+                        # Referee-specific averages
+                        avg_goals = ref_matches["Total Goals"].mean()
+                        avg_penalties = ref_matches["Total Penalties"].mean()
+                        avg_exclusions = ref_matches["Total Exclusions"].mean()
+
+                        # Display metrics with contextual global averages
+                        st.markdown(f"**Referee:** {selected_ref} — matches officiated: **{len(ref_matches)}**")
+
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("⚽ Avg Total Goals per Match", f"{avg_goals:.1f}")
+                        col1.markdown(f"<small>Global Avg: {global_avg_goals:.1f}</small>", unsafe_allow_html=True)
+
+                        col2.metric("🚩 Avg Total Penalties per Match", f"{avg_penalties:.1f}")
+                        col2.markdown(f"<small>Global Avg: {global_avg_penalties:.1f}</small>", unsafe_allow_html=True)
+
+                        col3.metric("❌ Avg Total Exclusions per Match", f"{avg_exclusions:.1f}")
+                        col3.markdown(f"<small>Global Avg: {global_avg_exclusions:.1f}</small>", unsafe_allow_html=True)
+
+                        # 🎯 Centre-Forward Pass Outcomes
+                        st.markdown("### 🎯 Centre-Forward Pass Outcomes")
+
+                        # Define expected CF columns
+                        cf_cols = [
+                            "Pass to CF + Outcome",
+                            "Pass to CF Neutral Outcome",
+                            "Pass to CF - Outcome"
+                        ]
+                        cf_data = {}
+                        for col in cf_cols:
+                            if col in ref_matches.columns:
+                                cf_data[col] = ref_matches[col].fillna(0).mean()
+
+                        if cf_data:
+                            cf_df = pd.DataFrame({
+                                "Outcome": list(cf_data.keys()),
+                                "Avg per match": list(cf_data.values())
+                            })
+                            cf_df["Outcome"] = cf_df["Outcome"].replace({
+                                "Pass to CF + Outcome": "Pass to CF +",
+                                "Pass to CF Neutral Outcome": "Pass to CF Neutral",
+                                "Pass to CF - Outcome": "Pass to CF -"
+                            })
+
+                            fig = px.bar(
+                                cf_df,
+                                x="Avg per match",
+                                y="Outcome",
+                                orientation="h",
+                                title=f"Centre-Forward Pass Outcomes for {selected_ref}",
+                                text="Avg per match",
+                                color="Outcome",
+                                color_discrete_sequence=px.colors.qualitative.Set2
+                            )
+                            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                            fig.update_layout(
+                                yaxis_title="Outcome",
+                                xaxis_title="Average per Match",
+                                height=320,
+                                margin=dict(l=120, r=20, t=40, b=40)
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.info(f"No 'Pass to CF' data available for {selected_ref}.")
+
+            except Exception as e:
+                st.error(f"❌ Error generating Referee Analysis: {e}")
 
 if __name__ == "__main__":
     main()
