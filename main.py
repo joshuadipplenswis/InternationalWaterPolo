@@ -99,99 +99,106 @@ def main():
     # -----------------------------------------
     # 1) Global filters (apply to ALL tabs)
     # -----------------------------------------
-    with st.container():
-        st.markdown("### 🔍 Filter by Competition")
+    # -----------------------------------------
+    # 1) Global filters (apply to ALL tabs)
+    # -----------------------------------------
 
-        if 'Competition' in df_win.columns and 'Competition' in df_loss.columns:
-            competition_options = sorted(set(df_win['Competition'].dropna()) | set(df_loss['Competition'].dropna()))
-            selected_competitions = st.multiselect(
-                "Select Competitions to Include",
-                competition_options,
-                default=competition_options
-            )
-            if selected_competitions:
-                df_win_filtered = df_win[df_win['Competition'].isin(selected_competitions)].copy()
-                df_loss_filtered = df_loss[df_loss['Competition'].isin(selected_competitions)].copy()
-            else:
-                df_win_filtered = df_win.copy()
-                df_loss_filtered = df_loss.copy()
+    # Start of styled container
+    st.markdown("""
+    <div style="
+        background-color: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 12px;
+        border: 1px solid #e0e0e0;
+        margin-bottom: 25px;
+    ">
+    """, unsafe_allow_html=True)
+
+    # ---------- Filter by Competition ----------
+    st.markdown("### 🔍 Filter by Competition")
+
+    if 'Competition' in df_win.columns and 'Competition' in df_loss.columns:
+        competition_options = sorted(set(df_win['Competition'].dropna()) | set(df_loss['Competition'].dropna()))
+        selected_competitions = st.multiselect(
+            "Select Competitions to Include",
+            competition_options,
+            default=competition_options
+        )
+        if selected_competitions:
+            df_win_filtered = df_win[df_win['Competition'].isin(selected_competitions)].copy()
+            df_loss_filtered = df_loss[df_loss['Competition'].isin(selected_competitions)].copy()
         else:
-            st.warning("⚠️ 'Competition' column not found in one or both sheets. Showing all data.")
             df_win_filtered = df_win.copy()
             df_loss_filtered = df_loss.copy()
+    else:
+        st.warning("⚠️ 'Competition' column not found in one or both sheets. Showing all data.")
+        df_win_filtered = df_win.copy()
+        df_loss_filtered = df_loss.copy()
 
-        # 🪜 Filter by Match Tier
-        if 'Tier' in df_win.columns and 'Tier' in df_loss.columns:
-            st.markdown("### 🎯 Filter by Match Tier")
+    # ---------- Filter by Match Tier ----------
+    if 'Tier' in df_win.columns and 'Tier' in df_loss.columns:
+        st.markdown("### 🎯 Filter by Match Tier")
 
-            # Explanation block
+        with st.expander("ℹ️ Tiering System Explained", expanded=False):
             st.markdown("""
-                    **ℹ️ Tiering System Explained**  
-                    - **Tier 1 Matches** are when the **Top 7 teams** play each other  
-                    - **Tier 2 Matches** are when one of the Top 7 teams plays a team outside the Top 7, or when 2 teams outside the Top 7 play each other  
-                    - **Tier 1 Teams**: AUS, ESP, GRE, HUN, ITA, NED, USA  
-                    - **Tier 2 Teams**: All other teams  
-                    """)
+            - **Tier 1 Matches:** Top 7 teams play each other  
+            - **Tier 2 Matches:** One Top 7 team vs. a team outside the Top 7, or two lower teams  
+            - **Tier 1 Teams:** AUS, ESP, GRE, HUN, ITA, NED, USA  
+            - **Tier 2 Teams:** All other teams  
+            """)
 
-            tier_options = sorted(set(df_win['Tier'].dropna()) | set(df_loss['Tier'].dropna()))
-            selected_tier = st.radio(
-                "Select Tier of Matches",
-                ["All Matches"] + tier_options,
-                index=0,
-                horizontal=True
-            )
+        tier_options = sorted(set(df_win['Tier'].dropna()) | set(df_loss['Tier'].dropna()))
+        selected_tier = st.radio(
+            "Select Tier of Matches",
+            ["All Matches"] + tier_options,
+            index=0,
+            horizontal=True
+        )
 
-            if selected_tier != "All Matches":
-                df_win_filtered = df_win_filtered[df_win_filtered['Tier'] == selected_tier].copy()
-                df_loss_filtered = df_loss_filtered[df_loss_filtered['Tier'] == selected_tier].copy()
-        else:
-            st.warning("⚠️ 'Tier' column not found in one or both sheets. Showing all data.")
+        if selected_tier != "All Matches":
+            df_win_filtered = df_win_filtered[df_win_filtered['Tier'] == selected_tier].copy()
+            df_loss_filtered = df_loss_filtered[df_loss_filtered['Tier'] == selected_tier].copy()
+    else:
+        st.warning("⚠️ 'Tier' column not found in one or both sheets. Showing all data.")
 
-    # ✅ Common numeric columns used throughout
-    num_cols = df_win_filtered.select_dtypes(include=np.number).columns.intersection(
-        df_loss_filtered.select_dtypes(include=np.number).columns
-    )
-
-    # 📅 Filter by Date Range (Timeframe)
+    # ---------- Filter by Timeframe ----------
     if 'Date' in df_win.columns and 'Date' in df_loss.columns:
         st.markdown("### 🗓️ Filter by Timeframe")
 
-        # Convert date columns to datetime if not already
+        # Convert date columns
         df_win['Date'] = pd.to_datetime(df_win['Date'], errors='coerce')
         df_loss['Date'] = pd.to_datetime(df_loss['Date'], errors='coerce')
 
-        # Determine global date range
         min_date = pd.concat([df_win['Date'], df_loss['Date']]).min()
         max_date = pd.Timestamp.today()
 
-        # Default = full dataset range
-        default_start = min_date
-        default_end = max_date
-
-        # Two-column layout for clarity
         col1, col2 = st.columns(2)
         with col1:
-            start_date = st.date_input("📆 From", value=default_start, min_value=min_date, max_value=max_date)
+            start_date = st.date_input("📆 From", value=min_date, min_value=min_date, max_value=max_date)
         with col2:
-            end_date = st.date_input("📅 To", value=default_end, min_value=min_date, max_value=max_date)
+            end_date = st.date_input("📅 To", value=max_date, min_value=min_date, max_value=max_date)
 
-        # Apply filter
         df_win_filtered = df_win_filtered[
             (df_win_filtered['Date'] >= pd.Timestamp(start_date)) &
             (df_win_filtered['Date'] <= pd.Timestamp(end_date))
             ].copy()
-
         df_loss_filtered = df_loss_filtered[
             (df_loss_filtered['Date'] >= pd.Timestamp(start_date)) &
             (df_loss_filtered['Date'] <= pd.Timestamp(end_date))
             ].copy()
 
-        # Optional summary below
         st.info(
             f"Filtering data between **{start_date.strftime('%d %b %Y')}** and **{end_date.strftime('%d %b %Y')}**.")
-
     else:
         st.warning("⚠️ 'Date' column not found in one or both sheets. Showing all data.")
+
+    # End of styled container
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ✅ Common numeric columns used throughout
+    num_cols = df_win_filtered.select_dtypes(include=np.number).columns.intersection(
+        df_loss_filtered.select_dtypes(include=np.number).columns
+    )
 
     # -----------------------------------------
     # 2) Tabs
@@ -1022,44 +1029,36 @@ def main():
                         st.warning(f"No matches found for {selected_ref}.")
                     else:
                         # ✅ Compute total stats per match
-                        ref_matches["Total Goals"] = (
-                                ref_matches["Goals Scored"].fillna(0) + ref_matches["Goals Conceded"].fillna(0)
-                        )
-                        ref_matches["Total Penalties"] = (
-                                ref_matches["Penalties Awarded"].fillna(0) + ref_matches["Penalties Conceded"].fillna(0)
-                        )
-                        ref_matches["Total Exclusions"] = (
-                                ref_matches["Exclusions Won"].fillna(0) + ref_matches["Exclusions Conceded"].fillna(0)
-                        )
+                        ref_matches["Total Goals"] = ref_matches["Goals Scored"].fillna(0) + ref_matches[
+                            "Goals Conceded"].fillna(0)
+                        ref_matches["Total Penalties"] = ref_matches["Penalties Awarded"].fillna(0) + ref_matches[
+                            "Penalties Conceded"].fillna(0)
+                        ref_matches["Total Exclusions"] = ref_matches["Exclusions Won"].fillna(0) + ref_matches[
+                            "Exclusions Conceded"].fillna(0)
 
                         # Dataset-wide averages for context
                         global_avg_goals = (
-                                df_ref["Goals Scored"].fillna(0) + df_ref["Goals Conceded"].fillna(0)
-                        ).mean()
+                                    df_ref["Goals Scored"].fillna(0) + df_ref["Goals Conceded"].fillna(0)).mean()
                         global_avg_penalties = (
-                                df_ref["Penalties Awarded"].fillna(0) + df_ref["Penalties Conceded"].fillna(0)
-                        ).mean()
+                                    df_ref["Penalties Awarded"].fillna(0) + df_ref["Penalties Conceded"].fillna(
+                                0)).mean()
                         global_avg_exclusions = (
-                                df_ref["Exclusions Won"].fillna(0) + df_ref["Exclusions Conceded"].fillna(0)
-                        ).mean()
+                                    df_ref["Exclusions Won"].fillna(0) + df_ref["Exclusions Conceded"].fillna(0)).mean()
 
                         # Referee-specific averages
                         avg_goals = ref_matches["Total Goals"].mean()
                         avg_penalties = ref_matches["Total Penalties"].mean()
                         avg_exclusions = ref_matches["Total Exclusions"].mean()
 
-                        # Display metrics with contextual global averages
-                        st.markdown(f"**Referee:** {selected_ref} — matches officiated: **{len(ref_matches)}**")
+                        st.markdown(f"**Referee:** {selected_ref} — Matches officiated: **{len(ref_matches)}**")
 
                         col1, col2, col3 = st.columns(3)
-                        col1.metric("⚽ Avg Total Goals per Match", f"{avg_goals:.1f}")
-                        col1.markdown(f"<small>Global Avg: {global_avg_goals:.1f}</small>", unsafe_allow_html=True)
-
-                        col2.metric("🚩 Avg Total Penalties per Match", f"{avg_penalties:.1f}")
-                        col2.markdown(f"<small>Global Avg: {global_avg_penalties:.1f}</small>", unsafe_allow_html=True)
-
-                        col3.metric("❌ Avg Total Exclusions per Match", f"{avg_exclusions:.1f}")
-                        col3.markdown(f"<small>Global Avg: {global_avg_exclusions:.1f}</small>", unsafe_allow_html=True)
+                        col1.metric("⚽ Avg Total Goals per Match", f"{avg_goals:.1f}",
+                                    f"Global Avg: {global_avg_goals:.1f}")
+                        col2.metric("🚩 Avg Total Penalties per Match", f"{avg_penalties:.1f}",
+                                    f"Global Avg: {global_avg_penalties:.1f}")
+                        col3.metric("❌ Avg Total Exclusions per Match", f"{avg_exclusions:.1f}",
+                                    f"Global Avg: {global_avg_exclusions:.1f}")
 
                         # 🎯 Centre-Forward Pass Outcomes
                         st.markdown("### 🎯 Centre-Forward Pass Outcomes")
@@ -1079,9 +1078,12 @@ def main():
                                 global_cf_data[col] = df_ref[col].fillna(0).mean()
 
                         if cf_data:
+                            # Reorder so +, Neutral, - appears in that order
+                            cf_order = ["Pass to CF + Outcome", "Pass to CF Neutral Outcome", "Pass to CF - Outcome"]
                             cf_df = pd.DataFrame({
-                                "Outcome": list(cf_data.keys()),
-                                "Avg per match": list(cf_data.values())
+                                "Outcome": [c for c in cf_order if c in cf_data],
+                                "Avg per match": [cf_data[c] for c in cf_order if c in cf_data],
+                                "Global Avg": [global_cf_data[c] for c in cf_order if c in global_cf_data]
                             })
                             cf_df["Outcome"] = cf_df["Outcome"].replace({
                                 "Pass to CF + Outcome": "Pass to CF +",
@@ -1089,35 +1091,83 @@ def main():
                                 "Pass to CF - Outcome": "Pass to CF -"
                             })
 
-                            fig = px.bar(
-                                cf_df,
-                                x="Avg per match",
-                                y="Outcome",
-                                orientation="h",
-                                title=f"Centre-Forward Pass Outcomes for {selected_ref}",
-                                text="Avg per match",
-                                color="Outcome",
-                                color_discrete_sequence=px.colors.qualitative.Set2
-                            )
-                            fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-                            fig.update_layout(
-                                yaxis_title="Outcome",
-                                xaxis_title="Average per Match",
-                                height=320,
-                                margin=dict(l=120, r=20, t=40, b=40)
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
+                            # Custom color map for outcomes
+                            color_map = {
+                                "Pass to CF +": "#2ecc71",  # green
+                                "Pass to CF Neutral": "#f39c12",  # orange
+                                "Pass to CF -": "#e74c3c"  # red
+                            }
 
-                            # ✅ Add global averages underneath chart for context
-                            st.markdown("#### ⚖️ Contextual Averages (All Matches)")
-                            global_cf_text = ""
-                            for col, val in global_cf_data.items():
-                                short_label = col.replace("Pass to CF ", "")
-                                global_cf_text += f"- **{short_label}:** {val:.2f} per match  \n"
-                            st.markdown(global_cf_text)
+                            col_chart, col_avg = st.columns([3, 1])
+
+                            with col_chart:
+                                fig = px.bar(
+                                    cf_df,
+                                    x="Avg per match",
+                                    y="Outcome",
+                                    orientation="h",
+                                    title=f"Centre-Forward Pass Outcomes for {selected_ref}",
+                                    text="Avg per match",
+                                    color="Outcome",
+                                    color_discrete_map=color_map
+                                )
+                                fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                                fig.update_layout(
+                                    yaxis_title="Outcome",
+                                    xaxis_title="Average per Match",
+                                    height=320,
+                                    margin=dict(l=120, r=20, t=40, b=40),
+                                    showlegend=False
+                                )
+                                st.plotly_chart(fig, use_container_width=True)
+
+                            with col_avg:
+                                st.markdown("#### ⚖️ Global Averages")
+                                for _, row in cf_df.iterrows():
+                                    st.markdown(f"**{row['Outcome']}**: {row['Global Avg']:.2f}")
 
                         else:
                             st.info(f"No 'Pass to CF' data available for {selected_ref}.")
+
+                        # 🏆 Team-specific win/loss record under this referee
+                        st.markdown("### 🏅 Team Results under this Referee")
+
+                        # Only proceed if 'Winning Team' exists
+                        if "Winning Team" in ref_matches.columns:
+                            # Try to also pull 'Losing Team' if available
+                            losing_available = "Losing Team" in df_loss_filtered.columns
+
+                            team_results = []
+                            all_teams = set(ref_matches['Winning Team'].dropna().unique())
+                            if losing_available:
+                                all_teams |= set(df_loss_filtered['Losing Team'].dropna().unique())
+
+                            for team in sorted(all_teams):
+                                wins = len(ref_matches[ref_matches['Winning Team'] == team])
+                                losses = 0
+                                if losing_available:
+                                    losses = len(df_loss_filtered[
+                                                     ((df_loss_filtered['Referee 1'] == selected_ref) |
+                                                      (df_loss_filtered['Referee 2'] == selected_ref)) &
+                                                     (df_loss_filtered['Losing Team'] == team)
+                                                     ])
+                                total = wins + losses
+                                if total > 0:
+                                    team_results.append(
+                                        {"Team": team, "Wins": wins, "Losses": losses, "Matches": total})
+
+                            if team_results:
+                                team_summary = pd.DataFrame(team_results).sort_values("Team")
+                                team_summary["Win %"] = (team_summary["Wins"] / team_summary["Matches"] * 100).round(1)
+                                st.dataframe(
+                                    team_summary[["Team", "Matches", "Wins", "Losses", "Win %"]],
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
+                            else:
+                                st.info("No team results available for this referee.")
+                        else:
+                            st.info("Winning Team column not found — cannot calculate team results.")
 
             except Exception as e:
                 st.error(f"❌ Error generating Referee Analysis: {e}")
