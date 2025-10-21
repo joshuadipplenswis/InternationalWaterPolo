@@ -1078,7 +1078,7 @@ def main():
                                 global_cf_data[col] = df_ref[col].fillna(0).mean()
 
                         if cf_data:
-                            # Reorder so +, Neutral, - appears in that order
+                            # Order so +, Neutral, - appears in that order
                             cf_order = ["Pass to CF + Outcome", "Pass to CF Neutral Outcome", "Pass to CF - Outcome"]
                             cf_df = pd.DataFrame({
                                 "Outcome": [c for c in cf_order if c in cf_data],
