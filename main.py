@@ -753,7 +753,58 @@ def main():
             else:
                 st.warning("⚠️ No valid numeric stats available for correlation analysis.")
 
-            # --- 2) Logistic Regression ---
+            # --- 2) KPI Correlation Insights ---
+            st.markdown("### 💡 KPI Correlation Insights")
+
+            try:
+                # Create a copy with only numeric columns and win indicator
+                corr_df = df_combined[num_cols.tolist() + ["WinBinary"]].copy()
+                insights = []
+
+                for stat in num_cols:
+                    if stat not in corr_df.columns:
+                        continue
+
+                    # Calculate correlation
+                    corr_val = corr_df[stat].corr(corr_df["WinBinary"])
+                    median_val = corr_df[stat].median()
+                    mean_val = corr_df[stat].mean()
+
+                    # Split data into above/below median groups
+                    high_group = corr_df[corr_df[stat] >= median_val]
+                    low_group = corr_df[corr_df[stat] < median_val]
+
+                    # Compute win rates
+                    high_win_rate = high_group["WinBinary"].mean() * 100
+                    low_win_rate = low_group["WinBinary"].mean() * 100
+                    diff = abs(high_win_rate - low_win_rate)
+
+                    # Only include stats with enough variation and meaningful difference
+                    if pd.notnull(corr_val) and abs(corr_val) > 0.2 and diff > 5:
+                        if corr_val > 0:
+                            insights.append(
+                                f"📈 Teams with **above-average {stat} (avg = {mean_val:.1f})** win **{high_win_rate:.1f}%** of games, "
+                                f"compared to **{low_win_rate:.1f}%** for those below average — "
+                                f"a **{diff:.1f}%** difference."
+                            )
+                        else:
+                            insights.append(
+                                f"📉 Teams with **above-average {stat} (avg = {mean_val:.1f})** win only **{high_win_rate:.1f}%** of games, "
+                                f"compared to **{low_win_rate:.1f}%** for those below average — "
+                                f"a **{diff:.1f}%** difference."
+                            )
+
+                if insights:
+                    st.markdown("#### 📊 Key Relationships Between Stats and Winning:")
+                    for line in insights[:5]:  # Show top 5 most relevant
+                        st.markdown(line)
+                else:
+                    st.info("No strong or consistent KPI correlations found in this dataset.")
+
+            except Exception as e:
+                st.error(f"⚠️ Error generating KPI correlation insights: {e}")
+
+            # --- 3) Logistic Regression ---
             st.markdown("### 📈 Logistic Regression")
             from sklearn.linear_model import LogisticRegression
             from sklearn.preprocessing import StandardScaler
@@ -778,8 +829,8 @@ def main():
 
                 st.markdown("""
                 **ℹ️ How to read this table:**  
-                - This shows which stats have the greatest impact on winning whilst taking other statistics into account.
-                - Which statistics matter the most predicting a win?  
+                - This shows which stats have the greatest impact on winning whilst taking other statistics into account.  
+                - Which statistics matter the most in predicting a win?  
                 """)
 
                 st.dataframe(
