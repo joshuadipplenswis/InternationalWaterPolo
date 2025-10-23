@@ -99,101 +99,82 @@ def main():
     # -----------------------------------------
     # 1) Global filters (apply to ALL tabs)
     # -----------------------------------------
-    # -----------------------------------------
-    # 1) Global filters (apply to ALL tabs)
-    # -----------------------------------------
 
-    # Start of styled container
-    st.markdown("""
-    <div style="
-        background-color: #f8f9fa;
-        padding: 1.5rem;
-        border-radius: 12px;
-        border: 1px solid #e0e0e0;
-        margin-bottom: 25px;
-    ">
-    """, unsafe_allow_html=True)
+    with st.sidebar:
+        st.markdown("## 🧭 Global Filters")
+        st.markdown("Use these filters to refine data across all tabs.")
 
-    # ---------- Filter by Competition ----------
-    st.markdown("### 🔍 Filter by Competition")
+        # ---------- Filter by Competition ----------
+        with st.expander("🔍 Filter by Competition", expanded=True):
+            if 'Competition' in df_win.columns and 'Competition' in df_loss.columns:
+                competition_options = sorted(set(df_win['Competition'].dropna()) | set(df_loss['Competition'].dropna()))
+                selected_competitions = st.multiselect(
+                    "Select Competitions",
+                    competition_options,
+                    default=competition_options
+                )
+                if selected_competitions:
+                    df_win_filtered = df_win[df_win['Competition'].isin(selected_competitions)].copy()
+                    df_loss_filtered = df_loss[df_loss['Competition'].isin(selected_competitions)].copy()
+                else:
+                    df_win_filtered = df_win.copy()
+                    df_loss_filtered = df_loss.copy()
+            else:
+                st.warning("⚠️ 'Competition' column not found.")
+                df_win_filtered = df_win.copy()
+                df_loss_filtered = df_loss.copy()
 
-    if 'Competition' in df_win.columns and 'Competition' in df_loss.columns:
-        competition_options = sorted(set(df_win['Competition'].dropna()) | set(df_loss['Competition'].dropna()))
-        selected_competitions = st.multiselect(
-            "Select Competitions to Include",
-            competition_options,
-            default=competition_options
-        )
-        if selected_competitions:
-            df_win_filtered = df_win[df_win['Competition'].isin(selected_competitions)].copy()
-            df_loss_filtered = df_loss[df_loss['Competition'].isin(selected_competitions)].copy()
-        else:
-            df_win_filtered = df_win.copy()
-            df_loss_filtered = df_loss.copy()
-    else:
-        st.warning("⚠️ 'Competition' column not found in one or both sheets. Showing all data.")
-        df_win_filtered = df_win.copy()
-        df_loss_filtered = df_loss.copy()
+        # ---------- Filter by Match Tier ----------
+        with st.expander("🎯 Filter by Match Tier", expanded=False):
+            if 'Tier' in df_win.columns and 'Tier' in df_loss.columns:
+                with st.popover("ℹ️ Tiering System Explained"):
+                    st.markdown("""
+                    - **Tier 1 Matches:** Top 7 teams play each other  
+                    - **Tier 2 Matches:** One Top 7 team vs. a team outside the Top 7, or two lower teams  
+                    - **Tier 1 Teams:** AUS, ESP, GRE, HUN, ITA, NED, USA  
+                    - **Tier 2 Teams:** All other teams  
+                    """)
 
-    # ---------- Filter by Match Tier ----------
-    if 'Tier' in df_win.columns and 'Tier' in df_loss.columns:
-        st.markdown("### 🎯 Filter by Match Tier")
+                tier_options = sorted(set(df_win['Tier'].dropna()) | set(df_loss['Tier'].dropna()))
+                selected_tier = st.radio(
+                    "Select Tier of Matches",
+                    ["All Matches"] + tier_options,
+                    index=0
+                )
 
-        with st.expander("ℹ️ Tiering System Explained", expanded=False):
-            st.markdown("""
-            - **Tier 1 Matches:** Top 7 teams play each other  
-            - **Tier 2 Matches:** One Top 7 team vs. a team outside the Top 7, or two lower teams  
-            - **Tier 1 Teams:** AUS, ESP, GRE, HUN, ITA, NED, USA  
-            - **Tier 2 Teams:** All other teams  
-            """)
+                if selected_tier != "All Matches":
+                    df_win_filtered = df_win_filtered[df_win_filtered['Tier'] == selected_tier].copy()
+                    df_loss_filtered = df_loss_filtered[df_loss_filtered['Tier'] == selected_tier].copy()
+            else:
+                st.warning("⚠️ 'Tier' column not found.")
 
-        tier_options = sorted(set(df_win['Tier'].dropna()) | set(df_loss['Tier'].dropna()))
-        selected_tier = st.radio(
-            "Select Tier of Matches",
-            ["All Matches"] + tier_options,
-            index=0,
-            horizontal=True
-        )
+        # ---------- Filter by Timeframe ----------
+        with st.expander("🗓️ Filter by Timeframe", expanded=False):
+            if 'Date' in df_win.columns and 'Date' in df_loss.columns:
+                df_win['Date'] = pd.to_datetime(df_win['Date'], errors='coerce')
+                df_loss['Date'] = pd.to_datetime(df_loss['Date'], errors='coerce')
 
-        if selected_tier != "All Matches":
-            df_win_filtered = df_win_filtered[df_win_filtered['Tier'] == selected_tier].copy()
-            df_loss_filtered = df_loss_filtered[df_loss_filtered['Tier'] == selected_tier].copy()
-    else:
-        st.warning("⚠️ 'Tier' column not found in one or both sheets. Showing all data.")
+                min_date = pd.concat([df_win['Date'], df_loss['Date']]).min()
+                max_date = pd.Timestamp.today()
 
-    # ---------- Filter by Timeframe ----------
-    if 'Date' in df_win.columns and 'Date' in df_loss.columns:
-        st.markdown("### 🗓️ Filter by Timeframe")
+                start_date = st.date_input("📆 From", value=min_date, min_value=min_date, max_value=max_date)
+                end_date = st.date_input("📅 To", value=max_date, min_value=min_date, max_value=max_date)
 
-        # Convert date columns
-        df_win['Date'] = pd.to_datetime(df_win['Date'], errors='coerce')
-        df_loss['Date'] = pd.to_datetime(df_loss['Date'], errors='coerce')
+                df_win_filtered = df_win_filtered[
+                    (df_win_filtered['Date'] >= pd.Timestamp(start_date)) &
+                    (df_win_filtered['Date'] <= pd.Timestamp(end_date))
+                    ].copy()
 
-        min_date = pd.concat([df_win['Date'], df_loss['Date']]).min()
-        max_date = pd.Timestamp.today()
+                df_loss_filtered = df_loss_filtered[
+                    (df_loss_filtered['Date'] >= pd.Timestamp(start_date)) &
+                    (df_loss_filtered['Date'] <= pd.Timestamp(end_date))
+                    ].copy()
 
-        col1, col2 = st.columns(2)
-        with col1:
-            start_date = st.date_input("📆 From", value=min_date, min_value=min_date, max_value=max_date)
-        with col2:
-            end_date = st.date_input("📅 To", value=max_date, min_value=min_date, max_value=max_date)
-
-        df_win_filtered = df_win_filtered[
-            (df_win_filtered['Date'] >= pd.Timestamp(start_date)) &
-            (df_win_filtered['Date'] <= pd.Timestamp(end_date))
-            ].copy()
-        df_loss_filtered = df_loss_filtered[
-            (df_loss_filtered['Date'] >= pd.Timestamp(start_date)) &
-            (df_loss_filtered['Date'] <= pd.Timestamp(end_date))
-            ].copy()
-
-        st.info(
-            f"Filtering data between **{start_date.strftime('%d %b %Y')}** and **{end_date.strftime('%d %b %Y')}**.")
-    else:
-        st.warning("⚠️ 'Date' column not found in one or both sheets. Showing all data.")
-
-    # End of styled container
-    st.markdown("</div>", unsafe_allow_html=True)
+                st.caption(
+                    f"Currently showing data between **{start_date.strftime('%d %b %Y')}** and **{end_date.strftime('%d %b %Y')}**."
+                )
+            else:
+                st.warning("⚠️ 'Date' column not found.")
 
     # ✅ Common numeric columns used throughout
     num_cols = df_win_filtered.select_dtypes(include=np.number).columns.intersection(
