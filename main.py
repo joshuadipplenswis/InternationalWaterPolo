@@ -231,6 +231,111 @@ def main():
         except Exception as e:
             st.error(f"❌ Error rendering Home tab: {e}")
 
+        # --- 🧠 Context-Adjusted Performance Summary (Data-Driven) ---
+        st.markdown("### 🧠 Context-Adjusted Performance Summary")
+
+        try:
+            # Confirm tier context
+            tier_context = "All Matches"
+            if "selected_tier" in locals():
+                tier_context = selected_tier
+
+            # Identify key metrics based on your actual dataset
+            key_stats = [
+                stat for stat in [
+                    "Goals Scored", "Goals Conceded", "Shots", "SoT",
+                    "Exclusions Won", "Exclusions Conceded",
+                    "Blocks", "Pass to CF", "GK Save"
+                ]
+                if stat in df_win_filtered.columns
+            ]
+
+            # Compute averages per tier
+            df_all = df_win_filtered.copy()
+            tier_1_df = df_all[df_all["Tier"] == "Tier 1"] if "Tier" in df_all.columns else pd.DataFrame()
+            tier_2_df = df_all[df_all["Tier"] == "Tier 2"] if "Tier" in df_all.columns else pd.DataFrame()
+
+            avg_all = df_all[key_stats].mean().round(1)
+            avg_t1 = tier_1_df[key_stats].mean().round(1) if not tier_1_df.empty else None
+            avg_t2 = tier_2_df[key_stats].mean().round(1) if not tier_2_df.empty else None
+
+            summary_lines = []
+
+            # Helper function to describe Tier 1 vs Tier 2 difference
+            def describe_change(stat, t1, t2):
+                diff = t1 - t2
+                if abs(diff) < 0.3:
+                    return None
+                direction = "higher" if diff > 0 else "lower"
+                return f"- **{stat}** averages are **{direction}** in Tier 1 matches ({t1:.1f}) vs Tier 2 ({t2:.1f})."
+
+            # --- Generate contextual insights dynamically ---
+            if avg_t1 is not None and avg_t2 is not None:
+                for stat in key_stats:
+                    text = describe_change(stat, avg_t1[stat], avg_t2[stat])
+                    if text:
+                        summary_lines.append(text)
+
+            # Write a short tier-specific overview
+            if tier_context == "Tier 1" and avg_t1 is not None:
+                st.markdown("**Tier 1 Matches (Top 7 vs Top 7):**")
+                total_goals_t1 = (avg_t1.get("Goals Scored", 0) + avg_t1.get("Goals Conceded", 0))
+                total_goals_all = (avg_all.get("Goals Scored", 0) + avg_all.get("Goals Conceded", 0))
+                st.markdown(
+                    f"- Average total goals per match: **{total_goals_t1:.1f}**, "
+                    f"compared to **{total_goals_all:.1f}** overall."
+                )
+                st.markdown(
+                    f"- Matches feature tighter defense with **Blocks {avg_t1.get('Blocks', 0):.1f}** and "
+                    f"**GK Saves {avg_t1.get('GK Save', 0):.1f}** on average."
+                )
+                st.markdown(
+                    "- Tier 1 contests are more structured, often decided by small efficiency margins in man-up and transition play."
+                )
+
+            elif tier_context == "Tier 2" and avg_t2 is not None:
+                st.markdown("**Tier 2 Matches (Mixed / Lower-Ranked):**")
+                total_goals_t2 = (avg_t2.get("Goals Scored", 0) + avg_t2.get("Goals Conceded", 0))
+                total_goals_all = (avg_all.get("Goals Scored", 0) + avg_all.get("Goals Conceded", 0))
+                st.markdown(
+                    f"- Average total goals per match: **{total_goals_t2:.1f}**, "
+                    f"compared to **{total_goals_all:.1f}** overall."
+                )
+                st.markdown(
+                    f"- Games are more open with **Shots {avg_t2.get('Shots', 0):.1f}** and **SoT {avg_t2.get('SoT', 0):.1f}**."
+                )
+                st.markdown(
+                    "- Tier 2 matches tend to produce more scoring chances but less defensive stability, "
+                    "with discipline playing a key role."
+                )
+
+            else:
+                st.markdown("**All Matches Combined:**")
+                total_goals_all = (avg_all.get("Goals Scored", 0) + avg_all.get("Goals Conceded", 0))
+                st.markdown(
+                    f"- Average total goals per match: **{total_goals_all:.1f}**."
+                )
+                st.markdown(
+                    f"- Typical team averages: **{avg_all.get('Shots', 0):.1f} shots**, "
+                    f"**{avg_all.get('SoT', 0):.1f} SoT**, "
+                    f"**{avg_all.get('Exclusions Conceded', 0):.1f} exclusions conceded**, "
+                    f"and **{avg_all.get('GK Save', 0):.1f} GK saves**."
+                )
+                st.markdown(
+                    "- Across all competitions, teams performing best tend to manage exclusion counts and maintain high defensive save efficiency."
+                )
+
+            # Optional: show Tier 1 vs Tier 2 comparison lines
+            if summary_lines:
+                st.markdown("#### 📊 Tier 1 vs Tier 2 Comparison Highlights:")
+                for line in summary_lines:
+                    st.markdown(line)
+
+            st.markdown("<hr style='margin-top: 1rem; margin-bottom: 1rem;'>", unsafe_allow_html=True)
+
+        except Exception as e:
+            st.error(f"⚠️ Error generating context-adjusted summary: {e}")
+
     # -------------------------
     # Tab 1: Statistically Significant Differences (Cohen's d)
     # -------------------------
