@@ -191,7 +191,8 @@ def main():
         "🆚 Comparison Table",
         "🔍 Team Breakdown",
         "🔮 Predictive Insights",
-        "⚖️ Referee Analysis"
+        "⚖️ Referee Analysis",
+        "🤽‍♀️ Opponent Profile"
     ])
 
     # -------------------------
@@ -1308,6 +1309,201 @@ def main():
 
             except Exception as e:
                 st.error(f"❌ Error generating Referee Analysis: {e}")
+
+            # -------------------------
+            # Tab 7: Opponent Profiling (Refined: Direction-aware, dynamic radar, better layout)
+            # -------------------------
+            with tabs[7]:
+                st.subheader("🎯 Opponent Profiling")
+
+                st.markdown("""
+                **ℹ️ What this shows:**  
+                A tactical and statistical fingerprint of the selected opponent —  
+                including their key strengths, weaknesses, and style indicators relative to all teams.
+                """)
+
+                try:
+                    df_combined_opp = pd.concat([df_win_filtered, df_loss_filtered], ignore_index=True)
+
+                    all_teams = sorted(
+                        set(df_combined_opp['Winning Team'].dropna()) | set(df_combined_opp['Losing Team'].dropna()))
+                    selected_team = st.selectbox("Select Opponent to Profile", all_teams)
+
+                    team_matches = df_combined_opp[
+                        (df_combined_opp['Winning Team'] == selected_team) |
+                        (df_combined_opp['Losing Team'] == selected_team)
+                        ].copy()
+
+                    if team_matches.empty:
+                        st.warning(f"No matches found for {selected_team}.")
+                    else:
+                        # --- Team Summary ---
+                        total_matches = len(team_matches)
+                        wins = (team_matches["Winning Team"] == selected_team).sum()
+                        win_rate = (wins / total_matches) * 100 if total_matches > 0 else 0
+
+                        st.markdown(f"## 🏐 {selected_team} Profile")
+
+                        col1, col2 = st.columns(2)
+                        col1.metric("📊 Matches Analysed", f"{total_matches}")
+                        col2.metric("🏆 Win Percentage", f"{win_rate:.1f}%")
+
+                        # --- Data prep ---
+                        num_cols = team_matches.select_dtypes(include=[np.number]).columns
+                        team_avg = team_matches[num_cols].mean()
+                        global_avg = df_combined_opp[num_cols].mean()
+
+                        # KPIs where lower values are better
+                        lower_is_better = [
+                            "Goals Conceded", "Penalties Conceded", "Missed Shots",
+                            "Shots Blocked", "SoT Conceded", "Exclusions Conceded",
+                            "Pass to CF Conceded", "Pass to CF - Outcome"
+                        ]
+
+                        # Direction-aware difference
+                        diff = {}
+                        for stat in num_cols:
+                            if stat in lower_is_better:
+                                diff[stat] = global_avg[stat] - team_avg[stat]  # lower = better
+                            else:
+                                diff[stat] = team_avg[stat] - global_avg[stat]  # higher = better
+                        diff = pd.Series(diff).sort_values(ascending=False)
+
+                        top_strengths = diff.head(3)
+                        top_weaknesses = diff.tail(3)
+
+                        from plotly import graph_objects as go
+
+                        # --- Strengths ---
+                        st.markdown("### 💪 Strengths")
+                        st.caption("Metrics where performance is significantly stronger than the competition average.")
+
+                        for stat in top_strengths.index:
+                            col_team, col_chart = st.columns([1, 2])
+                            with col_team:
+                                st.markdown(f"**{stat}**")
+                                st.markdown(
+                                    f"- Team Avg: **{team_avg[stat]:.2f}**  \n- Global Avg: **{global_avg[stat]:.2f}**")
+                            with col_chart:
+                                fig = go.Figure(go.Indicator(
+                                    mode="gauge+number+delta",
+                                    value=team_avg[stat],
+                                    delta={'reference': global_avg[stat], 'increasing': {'color': "green"}},
+                                    gauge={
+                                        'axis': {'range': [0, max(global_avg[stat] * 1.5, team_avg[stat] * 1.2)]},
+                                        'bar': {'color': "seagreen"},
+                                        'steps': [
+                                            {'range': [0, global_avg[stat]], 'color': "#f0f0f0"},
+                                            {'range': [global_avg[stat],
+                                                       max(global_avg[stat] * 1.5, team_avg[stat] * 1.2)],
+                                             'color': "#d4efdf"}
+                                        ],
+                                        'threshold': {'line': {'color': "black", 'width': 2}, 'value': global_avg[stat]}
+                                    },
+                                    title={'text': f"{stat} Comparison", 'font': {'size': 12}}
+                                ))
+                                fig.update_layout(height=190, margin=dict(t=25, b=0, l=0, r=0))
+                                st.plotly_chart(fig, use_container_width=True)
+
+                        st.markdown("---")
+
+                        # --- Weaknesses ---
+                        st.markdown("### ⚠️ Weaknesses")
+                        st.caption("Metrics where performance is below the competition average.")
+
+                        for stat in top_weaknesses.index:
+                            col_team, col_chart = st.columns([1, 2])
+                            with col_team:
+                                st.markdown(f"**{stat}**")
+                                st.markdown(
+                                    f"- Team Avg: **{team_avg[stat]:.2f}**  \n- Global Avg: **{global_avg[stat]:.2f}**")
+                            with col_chart:
+                                fig = go.Figure(go.Indicator(
+                                    mode="gauge+number+delta",
+                                    value=team_avg[stat],
+                                    delta={'reference': global_avg[stat], 'decreasing': {'color': "red"}},
+                                    gauge={
+                                        'axis': {'range': [0, max(global_avg[stat] * 1.5, team_avg[stat] * 1.2)]},
+                                        'bar': {'color': "crimson"},
+                                        'steps': [
+                                            {'range': [0, global_avg[stat]], 'color': "#f9e5e5"},
+                                            {'range': [global_avg[stat],
+                                                       max(global_avg[stat] * 1.5, team_avg[stat] * 1.2)],
+                                             'color': "#fdecea"}
+                                        ],
+                                        'threshold': {'line': {'color': "black", 'width': 2}, 'value': global_avg[stat]}
+                                    },
+                                    title={'text': f"{stat} Comparison", 'font': {'size': 12}}
+                                ))
+                                fig.update_layout(height=190, margin=dict(t=25, b=0, l=0, r=0))
+                                st.plotly_chart(fig, use_container_width=True)
+
+                        # --- Team Fingerprint Radar Chart ---
+                        st.markdown("---")
+                        st.markdown("### 🕸️ Team Fingerprint Summary")
+
+                        radar_metrics = {
+                            "Offense": ["Goals Scored", "6v6 Goals", "SoT"],
+                            "Defense": ["Goals Conceded", "Shots Blocked", "GK Save"],
+                            "Discipline": ["Exclusions Conceded", "Penalties Conceded"],
+                            "Efficiency": ["SoT", "Shots"],
+                            "CF Play": ["Pass to CF + Outcome", "Pass to CF - Outcome"]
+                        }
+
+                        radar_team = {}
+                        radar_global = {}
+
+                        for cat, stats in radar_metrics.items():
+                            t_vals = [team_avg.get(s, np.nan) for s in stats if s in team_avg]
+                            g_vals = [global_avg.get(s, np.nan) for s in stats if s in global_avg]
+                            if cat in ["Defense", "Discipline"]:
+                                radar_team[cat] = np.nanmean([g - t for t, g in zip(t_vals, g_vals)]) + 50
+                                radar_global[cat] = 50
+                            else:
+                                radar_team[cat] = np.nanmean(
+                                    [t / g * 50 if g != 0 else 50 for t, g in zip(t_vals, g_vals)])
+                                radar_global[cat] = 50
+
+                        radar_df = pd.DataFrame({
+                            "Category": radar_team.keys(),
+                            "Team": radar_team.values(),
+                            "Global Avg": radar_global.values()
+                        })
+
+                        # Determine color dynamically based on balance
+                        avg_performance = np.nanmean(list(radar_team.values()))
+                        if avg_performance >= 60:
+                            radar_color = "seagreen"
+                        elif avg_performance >= 45:
+                            radar_color = "gold"
+                        else:
+                            radar_color = "crimson"
+
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatterpolar(
+                            r=radar_df["Team"],
+                            theta=radar_df["Category"],
+                            fill='toself',
+                            name=selected_team,
+                            line=dict(color=radar_color)
+                        ))
+                        fig.add_trace(go.Scatterpolar(
+                            r=radar_df["Global Avg"],
+                            theta=radar_df["Category"],
+                            fill='toself',
+                            name="Global Avg",
+                            line=dict(color="lightgray", dash="dash")
+                        ))
+                        fig.update_layout(
+                            polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+                            showlegend=True,
+                            height=480,
+                            title=f"Overall Performance Fingerprint: {selected_team}"
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+
+                except Exception as e:
+                    st.error(f"❌ Error generating Opponent Profile: {e}")
 
 if __name__ == "__main__":
     main()
