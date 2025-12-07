@@ -7,3 +7,5 @@ scipy
 openpyxl
 plotly
 scikit-learn
+python-docx
+pypandoc
