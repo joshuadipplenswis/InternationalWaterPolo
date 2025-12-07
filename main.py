@@ -1594,6 +1594,95 @@ def main():
                     )
                     st.plotly_chart(fig, use_container_width=True)
 
+                    # -------------------------
+                    # REPORT EXPORT (Opponent Report) - robust DOCX with optional PDF conversion
+                    # -------------------------
+                    st.markdown("### 📄 Export Opponent Report")
+
+                    import tempfile
+                    import os
+                    from docx import Document
+
+                    def create_opponent_report_docx(team_name, total_matches, win_rate, strengths, weaknesses, team_avg,
+                                                    global_avg):
+                        doc = Document()
+                        doc.add_heading(f'{team_name} — Opponent Scouting Report', level=1)
+
+                        doc.add_heading('Summary', level=2)
+                        doc.add_paragraph(f"Matches Analysed: {total_matches}")
+                        doc.add_paragraph(f"Win Percentage: {win_rate:.1f}%")
+
+                        doc.add_heading('Top Strengths', level=2)
+                        for stat in strengths.index:
+                            tval = team_avg.get(stat, float('nan'))
+                            gval = global_avg.get(stat, float('nan'))
+                            doc.add_paragraph(f"- {stat}: Team Avg {tval:.2f}, Global Avg {gval:.2f}")
+
+                        doc.add_heading('Top Weaknesses', level=2)
+                        for stat in weaknesses.index:
+                            tval = team_avg.get(stat, float('nan'))
+                            gval = global_avg.get(stat, float('nan'))
+                            doc.add_paragraph(f"- {stat}: Team Avg {tval:.2f}, Global Avg {gval:.2f}")
+
+                        return doc
+
+                    try:
+                        # Build strength/weakness series (reuse variables from Opponent Profile section)
+                        strength_series = top_strengths if 'top_strengths' in locals() else pd.Series()
+                        weakness_series = top_weaknesses if 'top_weaknesses' in locals() else pd.Series()
+                        team_row = team_avg if 'team_avg' in locals() else (
+                            pd.Series() if 'team_avg' not in globals() else globals()['team_avg'])
+                        global_row = global_avg if 'global_avg' in locals() else (
+                            pd.Series() if 'global_avg' not in globals() else globals()['global_avg'])
+
+                        # create temporary docx
+                        doc = create_opponent_report_docx(selected_team, total_matches, win_rate, strength_series,
+                                                          weakness_series, team_row, global_row)
+                        docx_path = tempfile.NamedTemporaryFile(delete=False, suffix=".docx").name
+                        doc.save(docx_path)
+
+                        # Try convert to PDF if pypandoc available (may fail if pandoc binary missing)
+                        pdf_produced = False
+                        try:
+                            import pypandoc
+                            pdf_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
+                            # conversion may raise if pandoc binary not present
+                            pypandoc.convert_file(docx_path, 'pdf', outputfile=pdf_path)
+                            pdf_produced = os.path.exists(pdf_path)
+                        except Exception as conv_e:
+                            pdf_produced = False
+
+                        # Provide download buttons
+                        if pdf_produced:
+                            with open(pdf_path, "rb") as f:
+                                st.download_button(
+                                    label="📥 Download PDF Report",
+                                    data=f,
+                                    file_name=f"{selected_team}_Opponent_Report.pdf",
+                                    mime="application/pdf"
+                                )
+
+                        # Always offer DOCX fallback
+                        with open(docx_path, "rb") as f:
+                            st.download_button(
+                                label="📥 Download DOCX Report (recommended)",
+                                data=f,
+                                file_name=f"{selected_team}_Opponent_Report.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            )
+
+                    except Exception as e:
+                        st.error(f"⚠️ Could not create report file: {e}")
+                    finally:
+                        # cleanup temp files if they exist (wrapped in try to avoid masking errors)
+                        try:
+                            if 'docx_path' in locals() and os.path.exists(docx_path):
+                                os.remove(docx_path)
+                            if 'pdf_path' in locals() and os.path.exists(pdf_path):
+                                os.remove(pdf_path)
+                        except Exception:
+                            pass
+
                 except Exception as e:
                     st.error(f"❌ Error generating Opponent Profile: {e}")
 
