@@ -1630,10 +1630,8 @@ def main():
                         # Build strength/weakness series (reuse variables from Opponent Profile section)
                         strength_series = top_strengths if 'top_strengths' in locals() else pd.Series()
                         weakness_series = top_weaknesses if 'top_weaknesses' in locals() else pd.Series()
-                        team_row = team_avg if 'team_avg' in locals() else (
-                            pd.Series() if 'team_avg' not in globals() else globals()['team_avg'])
-                        global_row = global_avg if 'global_avg' in locals() else (
-                            pd.Series() if 'global_avg' not in globals() else globals()['global_avg'])
+                        team_row = pd.Series(team_avg) if not isinstance(team_avg, pd.Series) else team_avg
+                        global_row = pd.Series(global_avg) if not isinstance(global_avg, pd.Series) else global_avg
 
                         # create temporary docx
                         doc = create_opponent_report_docx(selected_team, total_matches, win_rate, strength_series,
